@@ -1,0 +1,43 @@
+import Foundation
+
+enum KimiSettingsKeys {
+    static let baseURL = "settings.kimi.baseURL"
+    static let model = "settings.kimi.model"
+    static let apiKey = "settings.kimi.apiKey"
+    static let maxTokens = "settings.kimi.maxTokens"
+    static let temperature = "settings.kimi.temperature"
+    static let topP = "settings.kimi.topP"
+    static let aiSummaryEnabled = "settings.aiSummaryEnabled"
+    static let haptics = "settings.haptics"
+}
+
+struct KimiRuntimeConfig {
+    static let defaultBaseURL = "https://api.moonshot.cn/v1"
+    static let defaultModel = "kimi-k2.5"
+
+    let baseURL: String
+    let model: String
+    let apiKey: String
+    let maxTokens: Int?
+    let temperature: Double?
+    let topP: Double?
+
+    var canRequestSummary: Bool {
+        apiKey.isEmpty == false && model.isEmpty == false && chatCompletionsURL != nil
+    }
+
+    var chatCompletionsURL: URL? {
+        var normalized = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized.isEmpty == false else { return nil }
+
+        while normalized.hasSuffix("/") {
+            normalized.removeLast()
+        }
+
+        if normalized.hasSuffix("/chat/completions") == false {
+            normalized += "/chat/completions"
+        }
+
+        return URL(string: normalized)
+    }
+}

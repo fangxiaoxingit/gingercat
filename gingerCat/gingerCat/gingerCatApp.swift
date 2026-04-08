@@ -1,10 +1,3 @@
-//
-//  gingerCatApp.swift
-//  gingerCat
-//
-//  Created by fsy on 2026/4/8.
-//
-
 import SwiftUI
 import SwiftData
 
@@ -12,7 +5,7 @@ import SwiftData
 struct gingerCatApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            ScanRecord.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

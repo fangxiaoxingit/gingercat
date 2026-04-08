@@ -400,6 +400,9 @@
 				DEVELOPMENT_TEAM = J5279V64S7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "需要启动相机以即时扫描海报。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "需要访问相册以分析截图内容。";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "需要访问提醒事项以创建识别结果对应的提醒。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -432,6 +435,9 @@
 				DEVELOPMENT_TEAM = J5279V64S7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "需要启动相机以即时扫描海报。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "需要访问相册以分析截图内容。";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "需要访问提醒事项以创建识别结果对应的提醒。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
