@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 #if canImport(UIKit)
 import UIKit
+import ImageIO
 #endif
 
 struct ArchiveView: View {
@@ -33,32 +34,39 @@ struct ArchiveView: View {
     }
 
     private var listContainer: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: 0) {
-                ForEach(filteredRecords) { record in
-                    SwipeableRow(
-                        record: record,
-                        onSelect: {
-                            triggerHaptic()
-                            selectedRecord = record
-                        },
-                        onDelete: {
-                            delete(record)
-                        }
-                    )
+        List {
+            ForEach(filteredRecords) { record in
+                Button {
+                    triggerHaptic()
+                    selectedRecord = record
+                } label: {
+                    ArchiveRowContent(record: record)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color(uiColor: .secondarySystemBackground))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                                )
+                        )
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 4)
                 }
-            }
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(.white)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                .buttonStyle(.plain)
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        delete(record)
+                    } label: {
+                        Label(String(localized: "删除"), systemImage: "trash")
                     }
-            )
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
     }
 
     private func triggerHaptic() {
@@ -91,74 +99,7 @@ struct ArchiveView: View {
     private func delete(_ record: ScanRecord) {
         withAnimation {
             modelContext.delete(record)
-        }
-    }
-}
-
-private struct SwipeableRow: View {
-    let record: ScanRecord
-    let onSelect: () -> Void
-    let onDelete: () -> Void
-
-    @State private var offset: CGFloat = 0
-    @State private var isSwiped: Bool = false
-
-    private let buttonWidth: CGFloat = 80
-
-    var body: some View {
-        ZStack {
-            // 背景删除按钮
-            HStack {
-                Spacer()
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: buttonWidth)
-                        .frame(maxHeight: .infinity)
-                        .background(Color.red)
-                }
-                .buttonStyle(.plain)
-            }
-
-            // 前景内容
-            Button(action: onSelect) {
-                ArchiveRowContent(record: record)
-            }
-            .buttonStyle(.plain)
-            .background(.white)
-            .offset(x: offset)
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 20, coordinateSpace: .local)
-                    .onChanged { value in
-                        // 只响应水平滑动
-                        if abs(value.translation.width) > abs(value.translation.height) {
-                            let translation = value.translation.width
-                            if translation < 0 {
-                                // 向左滑动，限制最大滑动距离
-                                offset = max(translation, -buttonWidth)
-                            } else if isSwiped {
-                                // 向右滑动恢复
-                                offset = min(translation - buttonWidth, 0)
-                            }
-                        }
-                    }
-                    .onEnded { value in
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            let translation = value.translation.width
-                            let velocity = value.predictedEndLocation.x - value.location.x
-
-                            // 根据滑动距离或速度决定是否打开/关闭
-                            if translation < -buttonWidth / 2 || velocity < -200 {
-                                offset = -buttonWidth
-                                isSwiped = true
-                            } else {
-                                offset = 0
-                                isSwiped = false
-                            }
-                        }
-                    }
-            )
+            try? modelContext.save()
         }
     }
 }
@@ -168,7 +109,7 @@ private struct ArchiveRowContent: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            RecordThumbnailView(imageData: record.imageData, side: 76)
+            RecordThumbnailView(cacheKey: record.id, imageData: record.imageData, side: 76)
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(summaryText)
@@ -225,8 +166,10 @@ private struct ArchiveRowContent: View {
 }
 
 private struct RecordThumbnailView: View {
+    let cacheKey: UUID
     let imageData: Data?
     let side: CGFloat
+    @State private var resolvedImage: UIImage?
 
     var body: some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -244,17 +187,58 @@ private struct RecordThumbnailView: View {
             }
             .frame(width: side, height: side)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .onAppear {
+                loadImageIfNeeded()
+            }
+            .onChange(of: cacheKey) { _, _ in
+                resolvedImage = nil
+                loadImageIfNeeded()
+            }
     }
 
-    private var resolvedImage: UIImage? {
+    private func loadImageIfNeeded() {
         #if canImport(UIKit)
-        guard let imageData else { return nil }
-        return UIImage(data: imageData)
-        #else
-        return nil
+        guard resolvedImage == nil, let imageData else { return }
+
+        let cacheToken = cacheKey.uuidString as NSString
+        if let cachedImage = ArchiveThumbnailCache.storage.object(forKey: cacheToken) {
+            resolvedImage = cachedImage
+            return
+        }
+
+        let maxPixel = Int(max(side * UIScreen.main.scale, side))
+        let decodedImage = decodeThumbnail(from: imageData, maxPixelSize: maxPixel)
+        resolvedImage = decodedImage
+        if let decodedImage {
+            ArchiveThumbnailCache.storage.setObject(decodedImage, forKey: cacheToken)
+        }
         #endif
     }
 }
+
+#if canImport(UIKit)
+private enum ArchiveThumbnailCache {
+    static let storage: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 300
+        return cache
+    }()
+}
+
+private func decodeThumbnail(from data: Data, maxPixelSize: Int) -> UIImage? {
+    let options: [CFString: Any] = [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        kCGImageSourceShouldCacheImmediately: true
+    ]
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+          let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+        return UIImage(data: data)
+    }
+    return UIImage(cgImage: cgImage)
+}
+#endif
 
 #Preview {
     NavigationStack {

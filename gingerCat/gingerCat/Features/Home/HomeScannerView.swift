@@ -216,7 +216,7 @@ struct HomeScannerView: View {
             if pendingTodos.isEmpty {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(moduleBackgroundColor)
-                    .frame(maxWidth: .infinity, minHeight: 120)
+                    .frame(maxWidth: .infinity, minHeight: 140)
                     .overlay {
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .stroke(cardBorderColor, lineWidth: 1)
@@ -227,7 +227,8 @@ struct HomeScannerView: View {
                             title: String(localized: "暂无待办"),
                             message: String(localized: "识别出时间或事件后，这里会自动出现最近待办。")
                         )
-                        .padding(20)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 26)
                     }
             } else {
                 VStack(spacing: 0) {
@@ -290,10 +291,6 @@ struct HomeScannerView: View {
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 18)
-        .background {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(colorScheme == .dark ? Color.black.opacity(0.18) : Color.white.opacity(0.72))
-        }
     }
 
     private var floatingAddButtonLayer: some View {
