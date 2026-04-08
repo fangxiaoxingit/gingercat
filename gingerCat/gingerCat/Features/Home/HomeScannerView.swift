@@ -21,6 +21,11 @@ struct HomeScannerView: View {
     @AppStorage(KimiSettingsKeys.aiSummaryEnabled) private var aiSummaryEnabled = false
     @AppStorage(KimiSettingsKeys.haptics) private var hapticsEnabled = true
 
+    private func triggerHaptic() {
+        guard hapticsEnabled else { return }
+        playSoftHaptic()
+    }
+
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var isPhotoPickerPresented = false
 
@@ -153,7 +158,7 @@ struct HomeScannerView: View {
                 Button {
                     isArchivePresented = true
                 } label: {
-                    Image(systemName: "list.bullet")
+                    Image(systemName: "clock")
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(.primary)
                         .padding(.horizontal, 4)
@@ -197,14 +202,21 @@ struct HomeScannerView: View {
 
     private var pendingTodosSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(String(localized: "最近待办事项"))
-                .font(.title3.weight(.medium))
-                .foregroundStyle(.primary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(String(localized: "最近待办事项"))
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(.primary)
+                
+                Text(String(localized: "识别出时间或事件后，这里会自动显示最近待办"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
             if pendingTodos.isEmpty {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(moduleBackgroundColor)
-                    .frame(maxWidth: .infinity, minHeight: 280)
+                    .frame(maxWidth: .infinity, minHeight: 120)
                     .overlay {
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .stroke(cardBorderColor, lineWidth: 1)
@@ -218,36 +230,36 @@ struct HomeScannerView: View {
                         .padding(20)
                     }
             } else {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(moduleBackgroundColor)
-                    .frame(maxWidth: .infinity, minHeight: 280)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(cardBorderColor, lineWidth: 1)
-                    }
-                    .overlay {
-                        VStack(spacing: 0) {
-                            ForEach(Array(pendingTodos.enumerated()), id: \.element.id) { index, item in
-                                Button {
-                                    selectedPendingRecord = item.record
-                                } label: {
-                                    pendingTodoRow(item)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 14)
-                                }
-                                .buttonStyle(.plain)
+                VStack(spacing: 0) {
+                    ForEach(Array(pendingTodos.enumerated()), id: \.element.id) { index, item in
+                        Button {
+                            triggerHaptic()
+                            selectedPendingRecord = item.record
+                        } label: {
+                            pendingTodoRow(item)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 14)
                                 .contentShape(Rectangle())
-
-                                if index < pendingTodos.count - 1 {
-                                    Divider()
-                                        .padding(.leading, 56)
-                                }
-                            }
                         }
-                        .padding(.vertical, 6)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .buttonStyle(.plain)
+
+                        if index < pendingTodos.count - 1 {
+                            Divider()
+                                .padding(.leading, 56)
+                        }
                     }
+                }
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(moduleBackgroundColor)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(cardBorderColor, lineWidth: 1)
+                        )
+                )
             }
         }
     }
@@ -741,28 +753,12 @@ private enum OCRCompletionNotificationService {
 private struct HomeRecordCollage: View {
     let records: [ScanRecord]
     @State private var animateCards = false
+    @State private var selectedRecord: ScanRecord?
 
     var body: some View {
         ZStack {
             ForEach(Array(records.prefix(3).enumerated()), id: \.element.id) { index, record in
-                HomeCollageCard(
-                    record: record,
-                    angle: angles[index % angles.count],
-                    offset: offsets[index % offsets.count],
-                    isFront: index == records.prefix(3).count - 1
-                )
-                .rotationEffect(.degrees(animateCards ? angles[index % angles.count] : 0))
-                .offset(
-                    x: animateCards ? offsets[index % offsets.count].width : 0,
-                    y: animateCards ? offsets[index % offsets.count].height : 0
-                )
-                .scaleEffect(animateCards ? 1 : 0.64)
-                .opacity(animateCards ? 1 : 0)
-                .zIndex(Double(index))
-                .animation(
-                    .spring(response: 0.50, dampingFraction: 0.78).delay(Double(index) * 0.10),
-                    value: animateCards
-                )
+                collageCard(for: record, at: index)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -773,10 +769,45 @@ private struct HomeRecordCollage: View {
         .onChange(of: recordIDs) { _, _ in
             playEntryAnimation()
         }
+        .navigationDestination(item: $selectedRecord) { record in
+            ArchiveDetailView(record: record)
+        }
+    }
+
+    private func collageCard(for record: ScanRecord, at index: Int) -> some View {
+        let angle = angles[index % angles.count]
+        let offset = offsets[index % offsets.count]
+        let isFront = index == records.prefix(3).count - 1
+        let targetAngle = animateCards ? angle : 0
+        let targetOffsetX = animateCards ? offset.width : 0
+        let targetOffsetY = animateCards ? offset.height : 0
+        let targetScale = animateCards ? 1.0 : 0.64
+        let targetOpacity = animateCards ? 1.0 : 0.0
+
+        return Button {
+            selectedRecord = record
+        } label: {
+            HomeCollageCard(
+                record: record,
+                angle: angle,
+                offset: offset,
+                isFront: isFront
+            )
+        }
+        .buttonStyle(.plain)
+        .rotationEffect(.degrees(targetAngle))
+        .offset(x: targetOffsetX, y: targetOffsetY)
+        .scaleEffect(targetScale)
+        .opacity(targetOpacity)
+        .zIndex(Double(index))
+        .animation(
+            .spring(response: 0.50, dampingFraction: 0.78).delay(Double(index) * 0.10),
+            value: animateCards
+        )
     }
 
     private var angles: [Double] {
-        [-13, -2, 13]
+        [-10, 0, 10]
     }
 
     private var offsets: [CGSize] {

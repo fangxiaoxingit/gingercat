@@ -3,6 +3,12 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage(KimiSettingsKeys.aiSummaryEnabled) private var aiSummaryEnabled = false
     @AppStorage(KimiSettingsKeys.haptics) private var hapticsEnabled = true
+    @AppStorage(KimiSettingsKeys.appearanceMode) private var appearanceModeRaw = AppearanceMode.automatic.rawValue
+    
+    private var appearanceMode: AppearanceMode {
+        get { AppearanceMode(rawValue: appearanceModeRaw) ?? .automatic }
+        set { appearanceModeRaw = newValue.rawValue }
+    }
 
     var body: some View {
         NavigationStack {
@@ -35,7 +41,7 @@ struct SettingsView: View {
                 modelListSection
             }
 
-            behaviorSection
+            appSettingsSection
         }
     }
 
@@ -84,6 +90,7 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 8)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -91,12 +98,64 @@ struct SettingsView: View {
         }
     }
 
-    private var behaviorSection: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 10) {
-                Label(String(localized: "体验"), systemImage: "hand.tap")
-                    .font(.headline)
-                Toggle(String(localized: "触感反馈"), isOn: $hapticsEnabled)
+    private var appSettingsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(String(localized: "APP 设置"))
+                .font(.headline)
+                .foregroundStyle(.primary)
+            
+            GlassCard(cornerRadius: 18) {
+                VStack(spacing: 0) {
+                    // 外观设置
+                    NavigationLink {
+                        AppearanceModeSelectionView(selectedMode: $appearanceModeRaw)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: appearanceMode.iconName)
+                                .font(.body)
+                                .foregroundStyle(AppTheme.primary)
+                                .frame(width: 24)
+                            
+                            Text(String(localized: "外观"))
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                            
+                            Spacer(minLength: 0)
+                            
+                            Text(appearanceMode.displayName)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Divider()
+                        .padding(.leading, 36)
+                    
+                    // 触感反馈
+                    HStack(spacing: 12) {
+                        Image(systemName: "hand.tap")
+                            .font(.body)
+                            .foregroundStyle(AppTheme.primary)
+                            .frame(width: 24)
+                        
+                        Text(String(localized: "触感反馈"))
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                        
+                        Spacer(minLength: 0)
+                        
+                        Toggle("", isOn: $hapticsEnabled)
+                            .labelsHidden()
+                    }
+                    .padding(.vertical, 12)
+                }
             }
         }
     }
@@ -173,6 +232,61 @@ private struct KimiModelConfigView: View {
                 .padding(10)
                 .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
+    }
+}
+
+private struct AppearanceModeSelectionView: View {
+    @Binding var selectedMode: String
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        ZStack {
+            LiquidBackground()
+            
+            ScrollView {
+                GlassCard(cornerRadius: 18) {
+                    VStack(spacing: 0) {
+                        ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                            Button {
+                                selectedMode = mode.rawValue
+                                dismiss()
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: mode.iconName)
+                                        .font(.body)
+                                        .foregroundStyle(AppTheme.primary)
+                                        .frame(width: 24)
+                                    
+                                    Text(mode.displayName)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.primary)
+                                    
+                                    Spacer(minLength: 0)
+                                    
+                                    if selectedMode == mode.rawValue {
+                                        Image(systemName: "checkmark")
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(AppTheme.primary)
+                                    }
+                                }
+                                .padding(.vertical, 12)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            
+                            if mode != AppearanceMode.allCases.last {
+                                Divider()
+                                    .padding(.leading, 36)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 20)
+            }
+        }
+        .navigationTitle(String(localized: "外观"))
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

@@ -9,6 +9,8 @@ struct ArchiveDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
+    @AppStorage(KimiSettingsKeys.haptics) private var hapticsEnabled = true
+
     @Bindable var record: ScanRecord
     @State private var isImagePreviewPresented = false
     @State private var isSavingReminder = false
@@ -112,6 +114,7 @@ struct ArchiveDetailView: View {
         Group {
             if let image = resolvedImage {
                 Button {
+                    triggerHaptic()
                     isImagePreviewPresented = true
                 } label: {
                     ZStack(alignment: .bottomTrailing) {
@@ -259,6 +262,14 @@ struct ArchiveDetailView: View {
     private func deleteRecord() {
         modelContext.delete(record)
         dismiss()
+    }
+
+    private func triggerHaptic() {
+        guard hapticsEnabled else { return }
+        #if canImport(UIKit)
+        let generator = UIImpactFeedbackGenerator(style: .soft)
+        generator.impactOccurred()
+        #endif
     }
 }
 
