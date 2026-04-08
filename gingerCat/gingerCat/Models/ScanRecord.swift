@@ -18,6 +18,8 @@ final class ScanRecord {
     var eventTitle: String?
     var eventDate: Date?
     var note: String
+    var isOCRCompleted: Bool = false
+    var usedAISummary: Bool = false
 
     init(
         id: UUID = UUID(),
@@ -29,7 +31,9 @@ final class ScanRecord {
         intent: ScanIntent,
         eventTitle: String? = nil,
         eventDate: Date? = nil,
-        note: String = ""
+        note: String = "",
+        isOCRCompleted: Bool = false,
+        usedAISummary: Bool = false
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -41,6 +45,8 @@ final class ScanRecord {
         self.eventTitle = eventTitle
         self.eventDate = eventDate
         self.note = note
+        self.isOCRCompleted = isOCRCompleted
+        self.usedAISummary = usedAISummary
     }
 
     var resolvedIntent: ScanIntent {
@@ -57,14 +63,18 @@ extension ScanRecord {
                 summary: "识别到一次产品评审会议，建议提前 30 分钟提醒。",
                 intent: .schedule,
                 eventTitle: "产品评审会",
-                eventDate: Calendar.current.date(byAdding: .day, value: 2, to: .now)
+                eventDate: Calendar.current.date(byAdding: .day, value: 2, to: .now),
+                isOCRCompleted: true,
+                usedAISummary: true
             ),
             ScanRecord(
                 source: "Camera",
                 recognizedText: "会议纪要：重点优化首页转化路径与埋点完整性。",
                 summary: "这张图主要是会议纪要，不包含明确时间信息。",
                 intent: .summary,
-                note: "后续整理成迭代任务"
+                note: "后续整理成迭代任务",
+                isOCRCompleted: true,
+                usedAISummary: false
             )
         ]
     }

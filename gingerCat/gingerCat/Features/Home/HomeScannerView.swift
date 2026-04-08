@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import PhotosUI
 import AVFoundation
+import UserNotifications
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -20,17 +21,18 @@ struct HomeScannerView: View {
     @AppStorage(KimiSettingsKeys.aiSummaryEnabled) private var aiSummaryEnabled = false
     @AppStorage(KimiSettingsKeys.haptics) private var hapticsEnabled = true
 
-    @State private var activeInsight: InsightPayload?
-
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var isPhotoPickerPresented = false
 
     @State private var isCameraPresented = false
     @State private var capturedCameraImage: UIImage?
 
-    @State private var isProcessingOCR = false
-    @State private var processingMessage = String(localized: "正在执行 OCR 识别...")
     @State private var activeAlert: HomeAlert?
+    @State private var isSettingsPresented = false
+    @State private var isArchivePresented = false
+    @State private var selectedPendingRecord: ScanRecord?
+    @ObservedObject private var recordNavigationCenter = RecordNavigationCenter.shared
+    @GestureState private var isQuickAddPressed = false
 
     var body: some View {
         NavigationStack {
@@ -43,22 +45,29 @@ struct HomeScannerView: View {
                         .padding(.top, 20)
                         .padding(.bottom, 140)
                 }
-                .allowsHitTesting(isProcessingOCR == false)
 
                 floatingAddButtonLayer
-
-                if isProcessingOCR {
-                    processingOverlay
+            }
+            .navigationTitle(String(localized: "首页"))
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        isSettingsPresented = true
+                    } label: {
+                        settingsToolbarButton
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .toolbar(.hidden, for: .navigationBar)
-            .sheet(item: $activeInsight) { payload in
-                InsightDrawerView(payload: payload) { record in
-                    withAnimation {
-                        modelContext.insert(record)
-                    }
-                    playSuccessHaptic()
-                }
+            .navigationDestination(isPresented: $isSettingsPresented) {
+                SettingsView()
+            }
+            .navigationDestination(isPresented: $isArchivePresented) {
+                ArchiveView()
+            }
+            .navigationDestination(item: $selectedPendingRecord) { record in
+                ArchiveDetailView(record: record)
             }
             .photosPicker(
                 isPresented: $isPhotoPickerPresented,
@@ -79,9 +88,18 @@ struct HomeScannerView: View {
             .onChange(of: capturedCameraImage) { _, newImage in
                 guard let newImage else { return }
                 Task {
-                    await processSelectedImage(newImage, source: "Camera")
+                    await enqueueImageForRecognition(newImage, source: "Camera")
                     capturedCameraImage = nil
                 }
+            }
+            .onAppear {
+                openPendingNotificationRecordIfNeeded()
+            }
+            .onChange(of: records.map(\.id)) { _, _ in
+                openPendingNotificationRecordIfNeeded()
+            }
+            .onReceive(recordNavigationCenter.$pendingRecordID) { _ in
+                openPendingNotificationRecordIfNeeded()
             }
             .alert(item: $activeAlert) { alert in
                 Alert(
@@ -94,18 +112,13 @@ struct HomeScannerView: View {
     }
 
     private var homeBackground: some View {
-        ZStack {
-            Color(uiColor: colorScheme == .dark ? .black : .systemGray6)
+        Color(uiColor: .systemBackground)
             .ignoresSafeArea()
-
-            DotGridBackground(dotColor: colorScheme == .dark ? .white.opacity(0.18) : .black.opacity(0.16))
-                .ignoresSafeArea()
-        }
     }
 
     private var homeWireframeLayout: some View {
         Group {
-            if #available(iOS 26.0, *) {
+            if #available(iOS 26.0, *), colorScheme == .light {
                 GlassEffectContainer(spacing: 24) {
                     homeWireframeContent
                 }
@@ -117,40 +130,15 @@ struct HomeScannerView: View {
 
     private var homeWireframeContent: some View {
         VStack(alignment: .leading, spacing: 24) {
-            topHeader
             recentRecordsSection
             pendingTodosSection
         }
     }
 
-    private var topHeader: some View {
-        HStack {
-            Text(String(localized: "首页"))
-                .font(.system(size: 40, weight: .bold))
-                .foregroundStyle(.primary)
-
-            Spacer(minLength: 0)
-
-            NavigationLink {
-                SettingsView()
-            } label: {
-                Circle()
-                    .fill(moduleBackgroundColor)
-                    .frame(width: 54, height: 54)
-                    .overlay {
-                        Circle()
-                            .stroke(cardBorderColor, lineWidth: 1)
-                    }
-                    .overlay {
-                        Image(systemName: "gearshape")
-                            .font(.system(size: 28, weight: .semibold))
-                            .foregroundStyle(.primary)
-                    }
-                    .homeInteractiveGlass(cornerRadius: 27, tint: accentGlassTint)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 6)
+    private var settingsToolbarButton: some View {
+        Image(systemName: "gearshape")
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(.primary)
     }
 
     private var recentRecordsSection: some View {
@@ -162,38 +150,48 @@ struct HomeScannerView: View {
 
                 Spacer(minLength: 0)
 
-                NavigationLink {
-                    ArchiveView()
+                Button {
+                    isArchivePresented = true
                 } label: {
-                    Circle()
-                        .fill(moduleBackgroundColor)
-                        .frame(width: 48, height: 48)
-                        .overlay {
-                            Circle()
-                                .stroke(cardBorderColor, lineWidth: 1)
-                        }
-                        .overlay {
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: 22, weight: .semibold))
-                                .foregroundStyle(.primary)
-                        }
-                        .homeInteractiveGlass(cornerRadius: 24, tint: accentGlassTint)
+                    Image(systemName: "list.bullet")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 4)
                 }
                 .buttonStyle(.plain)
             }
 
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(moduleBackgroundColor.opacity(0.92))
-                .frame(height: 320)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(cardBorderColor, lineWidth: 1)
-                }
-                .homeRegularGlass(cornerRadius: 16, tint: cardGlassTint)
-                .overlay {
-                    HomeRecordCollage(records: Array(records.prefix(3)))
-                        .padding(22)
-                }
+            if records.isEmpty {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(moduleBackgroundColor)
+                    .frame(height: 240)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(cardBorderColor, lineWidth: 1)
+                    }
+                    .overlay {
+                        homeEmptyState(
+                            systemImage: "photo.on.rectangle.angled",
+                            title: String(localized: "暂无记录"),
+                            message: String(localized: "扫描图片后，最近三条记录会展示在这里。")
+                        )
+                        .padding(20)
+                    }
+            } else {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(moduleBackgroundColor)
+                    .frame(height: 240)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(cardBorderColor, lineWidth: 1)
+                    }
+                    .homeRegularGlass(cornerRadius: 16, tint: cardGlassTint, enabled: colorScheme == .light)
+                    .overlay {
+                        HomeRecordCollage(records: Array(records.prefix(3)))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                    }
+            }
         }
     }
 
@@ -203,31 +201,43 @@ struct HomeScannerView: View {
                 .font(.title3.weight(.medium))
                 .foregroundStyle(.primary)
 
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(moduleBackgroundColor.opacity(0.92))
-                .frame(minHeight: 280)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(cardBorderColor, lineWidth: 1)
-                }
-                .homeRegularGlass(cornerRadius: 16, tint: cardGlassTint)
-                .overlay(alignment: .topLeading) {
-                    if pendingTodos.isEmpty {
-                        Text(String(localized: "暂无待办，点击右下角 + 开始识别"))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .padding(20)
-                    } else {
+            if pendingTodos.isEmpty {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(moduleBackgroundColor)
+                    .frame(maxWidth: .infinity, minHeight: 280)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(cardBorderColor, lineWidth: 1)
+                    }
+                    .overlay {
+                        homeEmptyState(
+                            systemImage: "checklist",
+                            title: String(localized: "暂无待办"),
+                            message: String(localized: "识别出时间或事件后，这里会自动出现最近待办。")
+                        )
+                        .padding(20)
+                    }
+            } else {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(moduleBackgroundColor)
+                    .frame(maxWidth: .infinity, minHeight: 280)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(cardBorderColor, lineWidth: 1)
+                    }
+                    .overlay {
                         VStack(spacing: 0) {
                             ForEach(Array(pendingTodos.enumerated()), id: \.element.id) { index, item in
-                                NavigationLink {
-                                    ArchiveDetailView(record: item.record)
+                                Button {
+                                    selectedPendingRecord = item.record
                                 } label: {
                                     pendingTodoRow(item)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                         .padding(.horizontal, 16)
                                         .padding(.vertical, 14)
                                 }
                                 .buttonStyle(.plain)
+                                .contentShape(Rectangle())
 
                                 if index < pendingTodos.count - 1 {
                                     Divider()
@@ -236,8 +246,41 @@ struct HomeScannerView: View {
                             }
                         }
                         .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
-                }
+            }
+        }
+    }
+
+    private func homeEmptyState(systemImage: String, title: String, message: String) -> some View {
+        VStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(AppTheme.primary.opacity(colorScheme == .dark ? 0.32 : 0.14))
+                    .frame(width: 56, height: 56)
+
+                Image(systemName: systemImage)
+                    .font(.system(size: 24, weight: .medium))
+                    .foregroundStyle(colorScheme == .dark ? .white : AppTheme.primary)
+            }
+
+            VStack(spacing: 6) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.82) : .secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+        .background {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(colorScheme == .dark ? Color.black.opacity(0.18) : Color.white.opacity(0.72))
         }
     }
 
@@ -251,34 +294,24 @@ struct HomeScannerView: View {
         }
         .padding(.trailing, 24)
         .padding(.bottom, 24)
-        .allowsHitTesting(isProcessingOCR == false)
     }
 
     private func pendingTodoRow(_ item: PendingTodoItem) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Circle()
-                .fill(moduleBackgroundColor)
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 28, weight: .regular))
+                .foregroundStyle(pendingTodoPrimaryTextColor)
                 .frame(width: 34, height: 34)
-                .overlay {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.primary)
-                }
-                .overlay {
-                    Circle()
-                        .stroke(Color.white.opacity(colorScheme == .dark ? 0.26 : 0.75), lineWidth: 1)
-                }
-                .homeRegularGlass(cornerRadius: 17, tint: accentGlassTint)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(item.title)
                     .font(.body.weight(.medium))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(pendingTodoPrimaryTextColor)
                     .lineLimit(2)
 
                 Text(item.timeText)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(pendingTodoSecondaryTextColor)
             }
 
             Spacer(minLength: 0)
@@ -287,35 +320,43 @@ struct HomeScannerView: View {
 
     private var quickAddButton: some View {
         Circle()
-            .fill(moduleBackgroundColor)
-            .frame(width: 84, height: 84)
+            .fill(AppTheme.primary)
+            .frame(width: 66, height: 66)
             .overlay {
                 Circle()
-                    .stroke(cardBorderColor, lineWidth: 1)
+                    .stroke(Color.white.opacity(0.22), lineWidth: 1)
             }
             .overlay {
                 Image(systemName: "plus")
-                    .font(.system(size: 42, weight: .bold))
-                    .foregroundStyle(.primary)
+                    .font(.system(size: 27, weight: .semibold))
+                    .foregroundStyle(.white)
             }
-            .homeInteractiveGlass(cornerRadius: 42, tint: accentGlassTint)
-            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.22 : 0.12), radius: 12, x: 0, y: 6)
+            .homeRegularGlass(cornerRadius: 33, tint: AppTheme.primary.opacity(0.24))
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.22 : 0.16), radius: 8, x: 0, y: 4)
+            .scaleEffect(isQuickAddPressed ? 0.93 : 1.0)
+            .brightness(isQuickAddPressed ? -0.05 : 0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.78), value: isQuickAddPressed)
             .onTapGesture {
-                guard isProcessingOCR == false else { return }
                 isPhotoPickerPresented = true
             }
             .onLongPressGesture(minimumDuration: 0.6) {
-                guard isProcessingOCR == false else { return }
                 Task {
                     await startCameraFlow()
                 }
             }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .updating($isQuickAddPressed) { _, state, _ in
+                        state = true
+                    }
+            )
+            .contentShape(Circle())
             .accessibilityLabel(String(localized: "添加识别"))
             .accessibilityHint(String(localized: "点击选图，长按拍照"))
     }
 
     private var moduleBackgroundColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.12) : .white
+        colorScheme == .dark ? Color(uiColor: .secondarySystemBackground) : .white
     }
 
     private var cardGlassTint: Color {
@@ -323,24 +364,39 @@ struct HomeScannerView: View {
     }
 
     private var accentGlassTint: Color {
-        colorScheme == .dark ? Color.white.opacity(0.20) : Color.black.opacity(0.05)
+        colorScheme == .dark ? Color.white.opacity(0.24) : Color.black.opacity(0.05)
     }
 
     private var cardBorderColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.28) : Color.black.opacity(0.18)
+        colorScheme == .dark ? Color.white.opacity(0.24) : Color.black.opacity(0.16)
+    }
+
+    private var pendingTodoPrimaryTextColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.96) : Color.black.opacity(0.86)
+    }
+
+    private var pendingTodoSecondaryTextColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.72) : Color.black.opacity(0.58)
     }
 
     private var pendingTodos: [PendingTodoItem] {
-        let scheduleCandidates = records
+        let todoRecords = records
             .filter { $0.resolvedIntent == .schedule }
             .sorted { lhs, rhs in
                 (lhs.eventDate ?? lhs.createdAt) < (rhs.eventDate ?? rhs.createdAt)
             }
-        let candidates = scheduleCandidates.isEmpty ? records : scheduleCandidates
-
-        return Array(candidates.prefix(3)).map { record in
+        
+        return Array(todoRecords.prefix(3)).map { record in
             let title = record.eventTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let resolvedTitle = (title?.isEmpty == false) ? title! : record.summary
+            let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedTitle: String
+            if let title, title.isEmpty == false {
+                resolvedTitle = title
+            } else if summary.isEmpty == false {
+                resolvedTitle = summary
+            } else {
+                resolvedTitle = String(localized: "未命名待办")
+            }
             let date = record.eventDate ?? record.createdAt
 
             return PendingTodoItem(
@@ -359,23 +415,6 @@ struct HomeScannerView: View {
         return formatter
     }
 
-    private var processingOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.18)
-                .ignoresSafeArea()
-
-            GlassCard {
-                HStack(spacing: 12) {
-                    ProgressView()
-                        .controlSize(.regular)
-                    Text(processingMessage)
-                        .font(.subheadline)
-                }
-            }
-            .padding(.horizontal, 32)
-        }
-    }
-
     @MainActor
     private func handlePhotoSelection(_ item: PhotosPickerItem) async {
         defer {
@@ -388,38 +427,189 @@ struct HomeScannerView: View {
                 activeAlert = HomeAlert(message: String(localized: "图片加载失败，请换一张图片重试。"))
                 return
             }
-            await processSelectedImage(image, source: "Photo")
+            await enqueueImageForRecognition(image, source: "Photo")
         } catch {
             activeAlert = HomeAlert(message: String(localized: "读取照片失败，请稍后重试。"))
         }
     }
 
     @MainActor
-    private func processSelectedImage(_ image: UIImage, source: String) async {
-        playSoftHaptic()
-        processingMessage = String(localized: "正在执行 OCR 识别...")
-        isProcessingOCR = true
-        defer {
-            isProcessingOCR = false
+    private func enqueueImageForRecognition(_ image: UIImage, source: String) async {
+        guard let imageData = image.jpegData(compressionQuality: 0.86) ?? image.pngData() else {
+            activeAlert = HomeAlert(message: String(localized: "当前图片格式暂不支持，请重试。"))
+            return
         }
+
+        let record = ScanRecord(
+            imageData: imageData,
+            source: source,
+            recognizedText: "",
+            summary: String(localized: "正在识别内容..."),
+            intent: .summary,
+            note: "",
+            isOCRCompleted: false,
+            usedAISummary: false
+        )
+        modelContext.insert(record)
+        try? modelContext.save()
+
+        playSoftHaptic()
+        let recordID = record.id
+        let runtimeConfig = kimiConfig
+        let useAI = aiSummaryEnabled
+
+        Task {
+            let result = await runRecognitionPipeline(
+                imageData: imageData,
+                source: source,
+                aiSummaryEnabled: useAI,
+                config: runtimeConfig
+            )
+            await MainActor.run {
+                applyRecognitionResult(result, to: recordID)
+            }
+        }
+    }
+
+    private func runRecognitionPipeline(
+        imageData: Data,
+        source: String,
+        aiSummaryEnabled: Bool,
+        config: KimiRuntimeConfig
+    ) async -> OCRPipelineResult {
+        #if canImport(UIKit)
+        guard let image = UIImage(data: imageData) else {
+            return OCRPipelineResult(
+                recognizedText: "",
+                summary: String(localized: "当前图片格式暂不支持，请重试。"),
+                intent: .summary,
+                eventTitle: nil,
+                eventDate: nil,
+                isOCRCompleted: false,
+                usedAISummary: false
+            )
+        }
+        #else
+        return OCRPipelineResult(
+            recognizedText: "",
+            summary: String(localized: "当前平台暂不支持 OCR。"),
+            intent: .summary,
+            eventTitle: nil,
+            eventDate: nil,
+            isOCRCompleted: false,
+            usedAISummary: false
+        )
+        #endif
 
         do {
             let recognizedText = try await VisionOCRService.recognizeText(from: image)
-            let imageData = image.jpegData(compressionQuality: 0.86) ?? image.pngData()
-            let localPayload = InsightPayloadBuilder.build(
+            let payload = InsightPayloadBuilder.build(
                 source: source,
                 recognizedText: recognizedText,
                 imageData: imageData
             )
-            processingMessage = aiSummaryEnabled ? String(localized: "正在生成 AI 摘要...") : String(localized: "正在整理结果...")
-            activeInsight = await applyAISummaryIfNeeded(for: localPayload)
+
+            var finalSummary = payload.summary
+            var usedAI = false
+            if aiSummaryEnabled, config.canRequestSummary {
+                if let aiSummary = try? await KimiAIService.summarize(
+                    rawText: payload.rawText,
+                    mode: payload.mode,
+                    events: payload.events,
+                    config: config
+                ) {
+                    finalSummary = aiSummary
+                    usedAI = true
+                }
+            }
+
+            return OCRPipelineResult(
+                recognizedText: payload.rawText,
+                summary: finalSummary,
+                intent: payload.mode.intent,
+                eventTitle: payload.events.first?.title,
+                eventDate: payload.events.first?.date,
+                isOCRCompleted: true,
+                usedAISummary: usedAI
+            )
         } catch VisionOCRServiceError.noRecognizedText {
-            activeAlert = HomeAlert(message: String(localized: "未识别到可用文字，请拍清晰一些或更换图片。"))
+            return OCRPipelineResult(
+                recognizedText: "",
+                summary: String(localized: "未识别到可用文字，请拍清晰一些或更换图片。"),
+                intent: .summary,
+                eventTitle: nil,
+                eventDate: nil,
+                isOCRCompleted: false,
+                usedAISummary: false
+            )
         } catch VisionOCRServiceError.invalidImage {
-            activeAlert = HomeAlert(message: String(localized: "当前图片格式暂不支持，请重试。"))
+            return OCRPipelineResult(
+                recognizedText: "",
+                summary: String(localized: "当前图片格式暂不支持，请重试。"),
+                intent: .summary,
+                eventTitle: nil,
+                eventDate: nil,
+                isOCRCompleted: false,
+                usedAISummary: false
+            )
         } catch {
-            activeAlert = HomeAlert(message: String(localized: "OCR 识别失败，请稍后再试。"))
+            return OCRPipelineResult(
+                recognizedText: "",
+                summary: String(localized: "OCR 识别失败，请稍后再试。"),
+                intent: .summary,
+                eventTitle: nil,
+                eventDate: nil,
+                isOCRCompleted: false,
+                usedAISummary: false
+            )
         }
+    }
+
+    @MainActor
+    private func applyRecognitionResult(_ result: OCRPipelineResult, to recordID: UUID) {
+        guard let record = records.first(where: { $0.id == recordID }) else { return }
+
+        record.recognizedText = result.recognizedText
+        record.summary = result.summary
+        record.intent = result.intent.rawValue
+        record.eventTitle = result.eventTitle
+        record.eventDate = result.eventDate
+        record.isOCRCompleted = result.isOCRCompleted
+        record.usedAISummary = result.usedAISummary
+        try? modelContext.save()
+
+        if result.isOCRCompleted {
+            playSuccessHaptic()
+            let completionTitle = completionNotificationTitle(for: record)
+            Task {
+                await OCRCompletionNotificationService.notify(
+                    recordID: record.id,
+                    title: completionTitle
+                )
+            }
+        } else {
+            activeAlert = HomeAlert(message: result.summary)
+        }
+    }
+
+    @MainActor
+    private func openPendingNotificationRecordIfNeeded() {
+        guard let recordID = recordNavigationCenter.pendingRecordID else { return }
+        guard let record = records.first(where: { $0.id == recordID }) else { return }
+        selectedPendingRecord = record
+        recordNavigationCenter.consumePendingRecordID()
+    }
+
+    private func completionNotificationTitle(for record: ScanRecord) -> String {
+        if let title = record.eventTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+           title.isEmpty == false {
+            return title
+        }
+        let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if summary.isEmpty {
+            return String(localized: "识别记录")
+        }
+        return String(summary.prefix(18))
     }
 
     @MainActor
@@ -471,41 +661,6 @@ struct HomeScannerView: View {
         #endif
     }
 
-    @MainActor
-    private func applyAISummaryIfNeeded(for payload: InsightPayload) async -> InsightPayload {
-        guard aiSummaryEnabled else {
-            return payload
-        }
-
-        let config = kimiConfig
-        guard config.canRequestSummary else {
-            activeAlert = HomeAlert(message: String(localized: "已开启 AI 总结，但 Kimi 配置不完整，已回退到本地摘要。"))
-            return payload
-        }
-
-        do {
-            let aiSummary = try await KimiAIService.summarize(
-                rawText: payload.rawText,
-                mode: payload.mode,
-                events: payload.events,
-                config: config
-            )
-
-            return InsightPayload(
-                imageData: payload.imageData,
-                source: payload.source,
-                rawText: payload.rawText,
-                summary: aiSummary,
-                summarySource: .ai,
-                mode: payload.mode,
-                events: payload.events
-            )
-        } catch {
-            activeAlert = HomeAlert(message: String(localized: "AI 总结失败，已回退到本地摘要。"))
-            return payload
-        }
-    }
-
     private var kimiConfig: KimiRuntimeConfig {
         KimiRuntimeConfig(
             baseURL: sanitized(kimiBaseURL, fallback: KimiRuntimeConfig.defaultBaseURL),
@@ -547,24 +702,39 @@ private struct HomeAlert: Identifiable {
     let message: String
 }
 
-private struct DotGridBackground: View {
-    let dotColor: Color
+private struct OCRPipelineResult {
+    let recognizedText: String
+    let summary: String
+    let intent: ScanIntent
+    let eventTitle: String?
+    let eventDate: Date?
+    let isOCRCompleted: Bool
+    let usedAISummary: Bool
+}
 
-    var body: some View {
-        GeometryReader { proxy in
-            Canvas { context, size in
-                let step: CGFloat = 38
-                let diameter: CGFloat = 3
-                for x in stride(from: CGFloat(8), through: size.width + step, by: step) {
-                    for y in stride(from: CGFloat(8), through: size.height + step, by: step) {
-                        let dot = CGRect(x: x, y: y, width: diameter, height: diameter)
-                        context.fill(Path(ellipseIn: dot), with: .color(dotColor))
-                    }
-                }
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height)
+private enum OCRCompletionNotificationService {
+    static func notify(recordID: UUID, title: String) async {
+        let center = UNUserNotificationCenter.current()
+
+        do {
+            let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
+            guard granted else { return }
+
+            let content = UNMutableNotificationContent()
+            content.title = String(localized: "识别完成")
+            content.body = "\(title) \(String(localized: "内容摘要已完成"))"
+            content.sound = .default
+            content.userInfo = ["recordID": recordID.uuidString]
+
+            let request = UNNotificationRequest(
+                identifier: "ocr.summary.\(recordID.uuidString)",
+                content: content,
+                trigger: nil
+            )
+            try await center.add(request)
+        } catch {
+            // Silent fail: local notification should not interrupt main OCR flow.
         }
-        .allowsHitTesting(false)
     }
 }
 
@@ -574,97 +744,128 @@ private struct HomeRecordCollage: View {
 
     var body: some View {
         ZStack {
-            ForEach(0..<3, id: \.self) { index in
+            ForEach(Array(records.prefix(3).enumerated()), id: \.element.id) { index, record in
                 HomeCollageCard(
-                    record: records.indices.contains(index) ? records[index] : nil,
+                    record: record,
                     angle: angles[index % angles.count],
                     offset: offsets[index % offsets.count],
-                    isFront: index == topRecordIndex
+                    isFront: index == records.prefix(3).count - 1
                 )
+                .rotationEffect(.degrees(animateCards ? angles[index % angles.count] : 0))
+                .offset(
+                    x: animateCards ? offsets[index % offsets.count].width : 0,
+                    y: animateCards ? offsets[index % offsets.count].height : 0
+                )
+                .scaleEffect(animateCards ? 1 : 0.64)
                 .opacity(animateCards ? 1 : 0)
-                .scaleEffect(animateCards ? 1 : 0.92)
-                .offset(y: animateCards ? 0 : 14)
+                .zIndex(Double(index))
                 .animation(
-                    .spring(response: 0.42, dampingFraction: 0.82).delay(Double(index) * 0.08),
+                    .spring(response: 0.50, dampingFraction: 0.78).delay(Double(index) * 0.10),
                     value: animateCards
                 )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
         .onAppear {
-            animateCards = true
+            playEntryAnimation()
+        }
+        .onChange(of: recordIDs) { _, _ in
+            playEntryAnimation()
         }
     }
 
     private var angles: [Double] {
-        [-14, -2, 14]
+        [-13, -2, 13]
     }
 
     private var offsets: [CGSize] {
         [
             CGSize(width: -78, height: -4),
-            CGSize(width: 0, height: 16),
+            CGSize(width: 0, height: 14),
             CGSize(width: 78, height: -4)
         ]
     }
 
-    private var topRecordIndex: Int {
-        if records.isEmpty {
-            return 2
+    private var recordIDs: [UUID] {
+        records.prefix(3).map(\.id)
+    }
+
+    private func playEntryAnimation() {
+        animateCards = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+            animateCards = true
         }
-        return min(records.count - 1, 2)
     }
 }
 
 private struct HomeCollageCard: View {
-    let record: ScanRecord?
+    @Environment(\.colorScheme) private var colorScheme
+    let record: ScanRecord
     let angle: Double
     let offset: CGSize
     let isFront: Bool
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color.white.opacity(0.42))
-            .overlay {
-                if let image = image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                } else {
-                    Text(String(localized: "图片"))
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                }
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(baseCardFill)
+
+            if let image = image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 120, height: 120)
+                    .clipped()
+            } else {
+                Text(String(localized: "图片"))
+                    .font(.title2)
+                    .foregroundStyle(.primary.opacity(0.7))
             }
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(
-                        isFront ? AppTheme.primary.opacity(0.45) : Color.white.opacity(0.74),
-                        lineWidth: isFront ? 2.5 : 1
-                    )
-            }
-            .homeRegularGlass(cornerRadius: 16, tint: AppTheme.primary.opacity(0.12))
-            .frame(width: 185, height: 185)
-            .rotationEffect(.degrees(angle))
-            .offset(offset)
-            .shadow(color: isFront ? AppTheme.primary.opacity(0.12) : .clear, radius: 6, x: 0, y: 2)
+        }
+        .frame(width: 120, height: 120)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(
+                    isFront ? AppTheme.primary.opacity(colorScheme == .dark ? 0.70 : 0.45) : neutralBorderColor,
+                    lineWidth: isFront ? 2.5 : 1
+                )
+        }
+        .homeRegularGlass(cornerRadius: 14, tint: glassTint, enabled: colorScheme == .light)
+        .shadow(color: shadowColor, radius: 8, x: 0, y: 3)
     }
 
     private var image: UIImage? {
         #if canImport(UIKit)
-        guard let record, let imageData = record.imageData else { return nil }
+        guard let imageData = record.imageData else { return nil }
         return UIImage(data: imageData)
         #else
         return nil
         #endif
     }
+
+    private var baseCardFill: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.72)
+    }
+
+    private var neutralBorderColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.34) : Color.black.opacity(0.18)
+    }
+
+    private var glassTint: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : AppTheme.primary.opacity(0.10)
+    }
+
+    private var shadowColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.28) : AppTheme.primary.opacity(0.10)
+    }
 }
 
 private extension View {
     @ViewBuilder
-    func homeRegularGlass(cornerRadius: CGFloat, tint: Color) -> some View {
-        if #available(iOS 26.0, *) {
+    func homeRegularGlass(cornerRadius: CGFloat, tint: Color, enabled: Bool = true) -> some View {
+        if #available(iOS 26.0, *), enabled {
             self.glassEffect(
                 .regular.tint(tint),
                 in: .rect(cornerRadius: cornerRadius, style: .continuous)

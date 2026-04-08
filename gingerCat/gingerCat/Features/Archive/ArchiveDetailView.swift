@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 #if canImport(UIKit)
 import UIKit
+import ImageIO
 #endif
 
 struct ArchiveDetailView: View {
@@ -52,7 +53,7 @@ struct ArchiveDetailView: View {
                         Label(String(localized: "删除"), systemImage: "trash")
                     }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Image(systemName: "ellipsis")
                         .font(.title3.weight(.semibold))
                 }
             }
@@ -114,12 +115,15 @@ struct ArchiveDetailView: View {
                     isImagePreviewPresented = true
                 } label: {
                     ZStack(alignment: .bottomTrailing) {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Color(uiColor: .secondarySystemBackground))
+
                         Image(uiImage: image)
                             .resizable()
-                            .scaledToFill()
-                            .frame(maxWidth: .infinity)
-                            .aspectRatio(4.0 / 3.0, contentMode: .fit)
-                            .clipped()
+                            .scaledToFit()
+                            .frame(maxWidth: .infinity, maxHeight: 120)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
 
                         Label(String(localized: "查看大图"), systemImage: "arrow.up.left.and.arrow.down.right")
                             .font(.caption.weight(.semibold))
@@ -128,6 +132,7 @@ struct ArchiveDetailView: View {
                             .background(.ultraThinMaterial, in: Capsule())
                             .padding(12)
                     }
+                    .frame(maxWidth: .infinity, minHeight: 120, maxHeight: 120)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -145,7 +150,7 @@ struct ArchiveDetailView: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .aspectRatio(4.0 / 3.0, contentMode: .fit)
+                    .frame(minHeight: 120, maxHeight: 120)
             }
         }
     }
@@ -209,7 +214,14 @@ struct ArchiveDetailView: View {
     private var resolvedImage: UIImage? {
         #if canImport(UIKit)
         guard let data = record.imageData else { return nil }
-        return UIImage(data: data)
+        if let image = UIImage(data: data) {
+            return image
+        }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
         #else
         return nil
         #endif
@@ -259,19 +271,54 @@ struct ArchiveDetailView: View {
 private struct ArchiveImagePreviewView: View {
     let image: UIImage
     @Binding var isPresented: Bool
+    @State private var baseScale: CGFloat = 1
+    @State private var gestureScale: CGFloat = 1
+    @State private var baseOffset: CGSize = .zero
+    @State private var gestureOffset: CGSize = .zero
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Color.black.ignoresSafeArea()
 
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .padding(.horizontal, 16)
-                .padding(.vertical, 40)
-                .onTapGesture {
-                    isPresented = false
-                }
+            GeometryReader { proxy in
+                let displayScale = clampedScale(baseScale * gestureScale)
+                let candidateOffset = CGSize(
+                    width: baseOffset.width + gestureOffset.width,
+                    height: baseOffset.height + gestureOffset.height
+                )
+                let displayOffset = clampedOffset(candidateOffset, scale: displayScale, in: proxy.size)
+
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 40)
+                    .scaleEffect(displayScale)
+                    .offset(displayOffset)
+                    .gesture(
+                        SimultaneousGesture(
+                            magnificationGesture(containerSize: proxy.size),
+                            dragGesture(containerSize: proxy.size)
+                        )
+                    )
+                    .onTapGesture(count: 2) {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
+                            if displayScale > 1.01 {
+                                resetTransform()
+                            } else {
+                                baseScale = 2
+                                baseOffset = .zero
+                            }
+                        }
+                    }
+                    .onTapGesture {
+                        if displayScale <= 1.01 {
+                            isPresented = false
+                        }
+                    }
+                    .contentShape(Rectangle())
+            }
 
             Button {
                 isPresented = false
@@ -282,6 +329,69 @@ private struct ArchiveImagePreviewView: View {
                     .padding(20)
             }
         }
+    }
+
+    private func magnificationGesture(containerSize: CGSize) -> some Gesture {
+        MagnificationGesture()
+            .onChanged { value in
+                gestureScale = value
+            }
+            .onEnded { value in
+                baseScale = clampedScale(baseScale * value)
+                gestureScale = 1
+
+                let currentOffset = CGSize(
+                    width: baseOffset.width + gestureOffset.width,
+                    height: baseOffset.height + gestureOffset.height
+                )
+                baseOffset = clampedOffset(currentOffset, scale: baseScale, in: containerSize)
+                gestureOffset = .zero
+            }
+    }
+
+    private func dragGesture(containerSize: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                guard clampedScale(baseScale * gestureScale) > 1.01 else {
+                    gestureOffset = .zero
+                    return
+                }
+                gestureOffset = value.translation
+            }
+            .onEnded { value in
+                guard clampedScale(baseScale * gestureScale) > 1.01 else {
+                    resetTransform()
+                    return
+                }
+
+                let currentOffset = CGSize(
+                    width: baseOffset.width + value.translation.width,
+                    height: baseOffset.height + value.translation.height
+                )
+                baseOffset = clampedOffset(currentOffset, scale: baseScale, in: containerSize)
+                gestureOffset = .zero
+            }
+    }
+
+    private func clampedScale(_ scale: CGFloat) -> CGFloat {
+        min(max(scale, 1), 4)
+    }
+
+    private func clampedOffset(_ offset: CGSize, scale: CGFloat, in size: CGSize) -> CGSize {
+        let maxX = max((size.width * (scale - 1)) / 2, 0)
+        let maxY = max((size.height * (scale - 1)) / 2, 0)
+
+        return CGSize(
+            width: min(max(offset.width, -maxX), maxX),
+            height: min(max(offset.height, -maxY), maxY)
+        )
+    }
+
+    private func resetTransform() {
+        baseScale = 1
+        gestureScale = 1
+        baseOffset = .zero
+        gestureOffset = .zero
     }
 }
 
