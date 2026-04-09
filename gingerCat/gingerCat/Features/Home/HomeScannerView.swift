@@ -12,14 +12,8 @@ struct HomeScannerView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Query(sort: \ScanRecord.createdAt, order: .reverse) private var records: [ScanRecord]
 
-    @AppStorage(KimiSettingsKeys.baseURL) private var kimiBaseURL = KimiRuntimeConfig.defaultBaseURL
-    @AppStorage(KimiSettingsKeys.model) private var kimiModel = KimiRuntimeConfig.defaultModel
-    @AppStorage(KimiSettingsKeys.apiKey) private var kimiAPIKey = ""
-    @AppStorage(KimiSettingsKeys.maxTokens) private var kimiMaxTokens = ""
-    @AppStorage(KimiSettingsKeys.temperature) private var kimiTemperature = ""
-    @AppStorage(KimiSettingsKeys.topP) private var kimiTopP = ""
-    @AppStorage(KimiSettingsKeys.aiSummaryEnabled) private var aiSummaryEnabled = false
-    @AppStorage(KimiSettingsKeys.haptics) private var hapticsEnabled = true
+    @AppStorage(AppSettingsKeys.aiSummaryEnabled) private var aiSummaryEnabled = false
+    @AppStorage(AppSettingsKeys.haptics) private var hapticsEnabled = true
 
     private func triggerHaptic() {
         guard hapticsEnabled else { return }
@@ -496,7 +490,7 @@ struct HomeScannerView: View {
         playSoftHaptic()
         showEnqueueToast()
         let recordID = record.id
-        let runtimeConfig = kimiConfig
+        let runtimeConfig = AIProviderConfigStore.selectedRuntimeConfig()
         let useAI = aiSummaryEnabled
 
         Task {
@@ -516,7 +510,7 @@ struct HomeScannerView: View {
         imageData: Data,
         source: String,
         aiSummaryEnabled: Bool,
-        config: KimiRuntimeConfig
+        config: AIProviderRuntimeConfig
     ) async -> OCRPipelineResult {
         #if canImport(UIKit)
         guard let image = UIImage(data: imageData) else {
@@ -564,7 +558,7 @@ struct HomeScannerView: View {
 
             if aiSummaryEnabled, config.canRequestSummary {
                 do {
-                    let aiInsight = try await KimiAIService.analyzeOCR(
+                    let aiInsight = try await AIProviderService.analyzeOCR(
                         rawText: payload.rawText,
                         config: config
                     )
@@ -746,34 +740,6 @@ struct HomeScannerView: View {
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
         #endif
-    }
-
-    private var kimiConfig: KimiRuntimeConfig {
-        KimiRuntimeConfig(
-            baseURL: sanitized(kimiBaseURL, fallback: KimiRuntimeConfig.defaultBaseURL),
-            model: sanitized(kimiModel, fallback: KimiRuntimeConfig.defaultModel),
-            apiKey: kimiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines),
-            maxTokens: parseInt(kimiMaxTokens),
-            temperature: parseDouble(kimiTemperature),
-            topP: parseDouble(kimiTopP)
-        )
-    }
-
-    private func sanitized(_ value: String, fallback: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? fallback : trimmed
-    }
-
-    private func parseInt(_ value: String) -> Int? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.isEmpty == false else { return nil }
-        return Int(trimmed)
-    }
-
-    private func parseDouble(_ value: String) -> Double? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.isEmpty == false else { return nil }
-        return Double(trimmed)
     }
 
     private func buildPipelineResultFromAI(

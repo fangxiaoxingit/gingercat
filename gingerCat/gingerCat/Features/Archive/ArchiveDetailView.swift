@@ -9,13 +9,7 @@ struct ArchiveDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    @AppStorage(KimiSettingsKeys.haptics) private var hapticsEnabled = true
-    @AppStorage(KimiSettingsKeys.baseURL) private var kimiBaseURL = KimiRuntimeConfig.defaultBaseURL
-    @AppStorage(KimiSettingsKeys.model) private var kimiModel = KimiRuntimeConfig.defaultModel
-    @AppStorage(KimiSettingsKeys.apiKey) private var kimiAPIKey = ""
-    @AppStorage(KimiSettingsKeys.maxTokens) private var kimiMaxTokens = ""
-    @AppStorage(KimiSettingsKeys.temperature) private var kimiTemperature = ""
-    @AppStorage(KimiSettingsKeys.topP) private var kimiTopP = ""
+    @AppStorage(AppSettingsKeys.haptics) private var hapticsEnabled = true
 
     @Bindable var record: ScanRecord
     @State private var isImagePreviewPresented = false
@@ -367,11 +361,11 @@ struct ArchiveDetailView: View {
     private func runAISummary() async {
         guard isRunningAISummary == false else { return }
 
-        let config = kimiConfig
+        let config = AIProviderConfigStore.selectedRuntimeConfig()
         guard config.canRequestSummary else {
             reminderFeedback = ReminderFeedback(
                 title: String(localized: "AI摘要失败"),
-                message: String(localized: "Kimi 配置不完整，请先到设置中补全 Base URL、Model 与 API Key。")
+                message: String(localized: "\(config.provider.displayName) 配置不完整，请先到设置中补全 Base URL、Model 与 API Key。")
             )
             return
         }
@@ -386,7 +380,7 @@ struct ArchiveDetailView: View {
                 recognizedText: recognition.text,
                 imageData: record.imageData
             )
-            let insight = try await KimiAIService.analyzeOCR(
+            let insight = try await AIProviderService.analyzeOCR(
                 rawText: payload.rawText,
                 config: config
             )
@@ -400,7 +394,7 @@ struct ArchiveDetailView: View {
                 title: String(localized: "AI摘要完成"),
                 message: String(localized: "已更新标题、详细内容、关键词和日期时间。")
             )
-        } catch let error as KimiAIServiceError {
+        } catch let error as AIProviderServiceError {
             reminderFeedback = ReminderFeedback(
                 title: String(localized: "AI摘要失败"),
                 message: error.localizedDescription
@@ -546,33 +540,6 @@ struct ArchiveDetailView: View {
         return keywords.isEmpty ? String(localized: "无") : keywords.joined(separator: " / ")
     }
 
-    private var kimiConfig: KimiRuntimeConfig {
-        KimiRuntimeConfig(
-            baseURL: sanitized(kimiBaseURL, fallback: KimiRuntimeConfig.defaultBaseURL),
-            model: sanitized(kimiModel, fallback: KimiRuntimeConfig.defaultModel),
-            apiKey: kimiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines),
-            maxTokens: parseInt(kimiMaxTokens),
-            temperature: parseDouble(kimiTemperature),
-            topP: parseDouble(kimiTopP)
-        )
-    }
-
-    private func sanitized(_ value: String, fallback: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? fallback : trimmed
-    }
-
-    private func parseInt(_ value: String) -> Int? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.isEmpty == false else { return nil }
-        return Int(trimmed)
-    }
-
-    private func parseDouble(_ value: String) -> Double? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.isEmpty == false else { return nil }
-        return Double(trimmed)
-    }
 }
 
 #Preview {

@@ -1,17 +1,17 @@
 import Foundation
 
-enum KimiAIServiceError: LocalizedError {
-    case invalidConfiguration
-    case invalidResponse
-    case requestFailed(String)
+enum AIProviderServiceError: LocalizedError {
+    case invalidConfiguration(AIProvider)
+    case invalidResponse(AIProvider)
+    case requestFailed(provider: AIProvider, message: String)
 
     var errorDescription: String? {
         switch self {
-        case .invalidConfiguration:
-            return String(localized: "Kimi 配置不完整，请检查 Base URL / Model / API Key。")
-        case .invalidResponse:
-            return String(localized: "Kimi 返回内容无法解析，请稍后重试。")
-        case .requestFailed(let message):
+        case .invalidConfiguration(let provider):
+            return String(localized: "\(provider.displayName) 配置不完整，请检查 Base URL / Model / API Key。")
+        case .invalidResponse(let provider):
+            return String(localized: "\(provider.displayName) 返回内容无法解析，请稍后重试。")
+        case .requestFailed(_, let message):
             return message
         }
     }
@@ -27,10 +27,10 @@ struct AIOCRInsight: Hashable {
     let needTodo: Bool
 }
 
-enum KimiAIService {
+enum AIProviderService {
     static func sendTestPrompt(
         _ prompt: String,
-        config: KimiRuntimeConfig
+        config: AIProviderRuntimeConfig
     ) async throws -> String {
         let content = try await requestCompletionContent(
             messages: [
@@ -49,14 +49,14 @@ enum KimiAIService {
         )
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else {
-            throw KimiAIServiceError.invalidResponse
+            throw AIProviderServiceError.invalidResponse(config.provider)
         }
         return trimmed
     }
 
     static func analyzeOCR(
         rawText: String,
-        config: KimiRuntimeConfig
+        config: AIProviderRuntimeConfig
     ) async throws -> AIOCRInsight {
         let content = try await requestCompletionContent(
             messages: [
@@ -72,20 +72,18 @@ enum KimiAIService {
                 ]
             ],
             config: config,
-            responseFormat: [
-                "type": "json_object"
-            ]
+            responseFormat: config.provider.supportsJSONOutput ? ["type": "json_object"] : nil
         )
-        return try decodeInsight(from: content)
+        return try decodeInsight(from: content, provider: config.provider)
     }
 
     private static func requestCompletionContent(
         messages: [[String: String]],
-        config: KimiRuntimeConfig,
+        config: AIProviderRuntimeConfig,
         responseFormat: [String: Any]? = nil
     ) async throws -> String {
         guard config.canRequestSummary, let url = config.chatCompletionsURL else {
-            throw KimiAIServiceError.invalidConfiguration
+            throw AIProviderServiceError.invalidConfiguration(config.provider)
         }
 
         var request = URLRequest(url: url)
@@ -102,31 +100,34 @@ enum KimiAIService {
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw KimiAIServiceError.invalidResponse
+            throw AIProviderServiceError.invalidResponse(config.provider)
         }
 
         guard (200 ... 299).contains(httpResponse.statusCode) else {
             let errorMessage = extractErrorMessage(from: data)
-            throw KimiAIServiceError.requestFailed(errorMessage ?? String(localized: "Kimi 请求失败，状态码 \(httpResponse.statusCode)。"))
+            throw AIProviderServiceError.requestFailed(
+                provider: config.provider,
+                message: errorMessage ?? String(localized: "\(config.provider.displayName) 请求失败，状态码 \(httpResponse.statusCode)。")
+            )
         }
 
-        let decoded = try JSONDecoder().decode(KimiChatCompletionResponse.self, from: data)
+        let decoded = try JSONDecoder().decode(ChatCompletionResponse.self, from: data)
         let content = decoded.choices.first?.message.textValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard content.isEmpty == false else {
-            throw KimiAIServiceError.invalidResponse
+            throw AIProviderServiceError.invalidResponse(config.provider)
         }
         return content
     }
 
-    private static func decodeInsight(from content: String) throws -> AIOCRInsight {
+    private static func decodeInsight(from content: String, provider: AIProvider) throws -> AIOCRInsight {
         guard let jsonData = normalizedJSONData(from: content) else {
-            throw KimiAIServiceError.invalidResponse
+            throw AIProviderServiceError.invalidResponse(provider)
         }
 
         let decoded = try JSONDecoder().decode(AIOCRInsightResponse.self, from: jsonData)
         let summary = decoded.summary.trimmingCharacters(in: .whitespacesAndNewlines)
         guard summary.isEmpty == false else {
-            throw KimiAIServiceError.invalidResponse
+            throw AIProviderServiceError.invalidResponse(provider)
         }
 
         let event = decoded.event
@@ -137,18 +138,13 @@ enum KimiAIService {
                 .prefix(3)
         )
 
-        let cleanedDate = cleanedOptional(event?.date)
-        let cleanedTime = cleanedOptional(event?.time)
-        let cleanedTitle = cleanedOptional(event?.title)
-        let cleanedDescription = cleanedOptional(event?.description)
-
         return AIOCRInsight(
             summary: summary,
-            date: cleanedDate,
-            time: cleanedTime,
-            title: cleanedTitle,
+            date: cleanedOptional(event?.date),
+            time: cleanedOptional(event?.time),
+            title: cleanedOptional(event?.title),
             keywords: cleanedKeywords,
-            description: cleanedDescription,
+            description: cleanedOptional(event?.description),
             needTodo: event?.needTodo ?? false
         )
     }
@@ -175,7 +171,7 @@ enum KimiAIService {
 
     private static func requestBody(
         messages: [[String: String]],
-        config: KimiRuntimeConfig,
+        config: AIProviderRuntimeConfig,
         responseFormat: [String: Any]? = nil
     ) -> [String: Any] {
         var payload: [String: Any] = [
@@ -187,14 +183,13 @@ enum KimiAIService {
         if let responseFormat {
             payload["response_format"] = responseFormat
         }
-
         if let maxTokens = config.maxTokens {
-            payload["max_tokens"] = maxTokens
+            payload[config.provider.maxTokensParameterName] = maxTokens
         }
-        if let temperature = config.temperature {
+        if let temperature = config.temperature, config.provider.allowsTemperature(for: config.model) {
             payload["temperature"] = temperature
         }
-        if let topP = config.topP {
+        if let topP = config.topP, config.provider.allowsTopP(for: config.model) {
             payload["top_p"] = topP
         }
 
@@ -202,9 +197,9 @@ enum KimiAIService {
     }
 
     private static func userPrompt(rawText: String) -> String {
-        return """
+        """
         请从 OCR 文本中一次性提取摘要与结构化信息，只输出标准JSON，无多余文字。
-        
+
         输出规则：
         1. summary：1-2句中文摘要，客观，不编造事实。
         2. event.date：YYYY-MM-DD；无明确日期填 null。
@@ -213,7 +208,7 @@ enum KimiAIService {
         5. event.keywords：关键词数组，0-3个。
         6. event.description：详细内容；无事件填 null。
         7. event.needTodo：布尔值。有明确未来日期才为 true，否则 false。
-        
+
         输出结构：
         {
           "summary": "摘要",
@@ -229,7 +224,7 @@ enum KimiAIService {
 
         返回内容必须是合法 JSON，只能使用 JSON 支持的类型，不要输出 | null、注释、代码块标记或额外说明。
         无事件时，event 字段仍保留，除 keywords 可为空数组外其余为 null，needTodo 为 false。
-        
+
         文本内容：
         \(rawText)
         """
@@ -242,10 +237,15 @@ enum KimiAIService {
     }
 
     private static func extractErrorMessage(from data: Data) -> String? {
-        guard let decoded = try? JSONDecoder().decode(KimiAPIErrorResponse.self, from: data) else {
-            return nil
+        if let decoded = try? JSONDecoder().decode(APIErrorEnvelope.self, from: data) {
+            if let message = decoded.error?.message, message.isEmpty == false {
+                return message
+            }
+            if let message = decoded.message, message.isEmpty == false {
+                return message
+            }
         }
-        return decoded.error.message
+        return nil
     }
 }
 
@@ -263,7 +263,7 @@ private struct AIOCREventPayload: Decodable {
     let needTodo: Bool?
 }
 
-private struct KimiChatCompletionResponse: Decodable {
+private struct ChatCompletionResponse: Decodable {
     struct Choice: Decodable {
         let message: Message
     }
@@ -302,10 +302,11 @@ private struct KimiChatCompletionResponse: Decodable {
     let choices: [Choice]
 }
 
-private struct KimiAPIErrorResponse: Decodable {
+private struct APIErrorEnvelope: Decodable {
     struct APIError: Decodable {
-        let message: String
+        let message: String?
     }
 
-    let error: APIError
+    let error: APIError?
+    let message: String?
 }
