@@ -168,6 +168,8 @@ private struct KimiModelConfigView: View {
     @AppStorage(KimiSettingsKeys.maxTokens) private var maxTokens = ""
     @AppStorage(KimiSettingsKeys.temperature) private var temperature = ""
     @AppStorage(KimiSettingsKeys.topP) private var topP = ""
+    @State private var isTestingConfig = false
+    @State private var testResult: KimiConfigTestResult?
 
     var body: some View {
         ZStack {
@@ -189,6 +191,13 @@ private struct KimiModelConfigView: View {
         }
         .navigationTitle("Kimi")
         .navigationBarTitleDisplayMode(.inline)
+        .alert(item: $testResult) { result in
+            Alert(
+                title: Text(result.title),
+                message: Text(result.message),
+                dismissButton: .default(Text(String(localized: "知道了")))
+            )
+        }
     }
 
     private var configSections: some View {
@@ -219,7 +228,78 @@ private struct KimiModelConfigView: View {
 
                 settingTextField(title: String(localized: "top_p"), placeholder: String(localized: "留空使用服务端默认"), text: $topP)
                     .keyboardType(.decimalPad)
+
+                Divider()
+
+                Button {
+                    Task {
+                        await testCurrentConfig()
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        if isTestingConfig {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "network")
+                                .font(.body.weight(.semibold))
+                        }
+
+                        Text(isTestingConfig ? String(localized: "测试中...") : String(localized: "测试配置"))
+                            .font(.subheadline.weight(.semibold))
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .foregroundStyle(.white)
+                    .background(AppTheme.primary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(isTestingConfig)
+
+                Text(String(localized: "点击后会发送一条测试提示词，验证当前模型和参数是否可用。"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    @MainActor
+    private func testCurrentConfig() async {
+        guard isTestingConfig == false else { return }
+
+        let config = runtimeConfig
+        guard config.canRequestSummary else {
+            testResult = KimiConfigTestResult(
+                title: String(localized: "测试失败"),
+                message: String(localized: "请先填写完整的 Base URL、Model 和 API Key。")
+            )
+            return
+        }
+
+        isTestingConfig = true
+        defer { isTestingConfig = false }
+
+        do {
+            let reply = try await KimiAIService.sendTestPrompt(
+                String(localized: "请用 30 个字介绍你是什么模型，目前的参数是什么，来自哪家公司"),
+                config: config
+            )
+            testResult = KimiConfigTestResult(
+                title: String(localized: "测试成功"),
+                message: reply
+            )
+        } catch let error as KimiAIServiceError {
+            testResult = KimiConfigTestResult(
+                title: String(localized: "测试失败"),
+                message: error.localizedDescription
+            )
+        } catch {
+            testResult = KimiConfigTestResult(
+                title: String(localized: "测试失败"),
+                message: error.localizedDescription
+            )
         }
     }
 
@@ -233,6 +313,40 @@ private struct KimiModelConfigView: View {
                 .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
     }
+
+    private var runtimeConfig: KimiRuntimeConfig {
+        KimiRuntimeConfig(
+            baseURL: sanitized(baseURL, fallback: KimiRuntimeConfig.defaultBaseURL),
+            model: sanitized(modelID, fallback: KimiRuntimeConfig.defaultModel),
+            apiKey: apiKey.trimmingCharacters(in: .whitespacesAndNewlines),
+            maxTokens: parseInt(maxTokens),
+            temperature: parseDouble(temperature),
+            topP: parseDouble(topP)
+        )
+    }
+
+    private func sanitized(_ value: String, fallback: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallback : trimmed
+    }
+
+    private func parseInt(_ value: String) -> Int? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return nil }
+        return Int(trimmed)
+    }
+
+    private func parseDouble(_ value: String) -> Double? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return nil }
+        return Double(trimmed)
+    }
+}
+
+private struct KimiConfigTestResult: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
 }
 
 private struct AppearanceModeSelectionView: View {

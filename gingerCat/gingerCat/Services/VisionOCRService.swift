@@ -9,9 +9,27 @@ enum VisionOCRServiceError: Error {
     case noRecognizedText
 }
 
+struct OCRLineBox: Codable, Hashable {
+    let text: String
+    let x: Double
+    let y: Double
+    let width: Double
+    let height: Double
+}
+
+struct OCRRecognitionResult: Hashable {
+    let text: String
+    let lineBoxes: [OCRLineBox]
+}
+
 #if canImport(UIKit)
 enum VisionOCRService {
     static func recognizeText(from image: UIImage) async throws -> String {
+        let result = try await recognize(from: image)
+        return result.text
+    }
+
+    static func recognize(from image: UIImage) async throws -> OCRRecognitionResult {
         guard let cgImage = image.cgImage else {
             throw VisionOCRServiceError.invalidImage
         }
@@ -26,10 +44,21 @@ enum VisionOCRService {
                 }
 
                 let observations = request.results as? [VNRecognizedTextObservation] ?? []
-                let lines = observations.compactMap { $0.topCandidates(1).first?.string }
-                let normalized = lines
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { $0.isEmpty == false }
+                let lineBoxes: [OCRLineBox] = observations.compactMap { (observation: VNRecognizedTextObservation) -> OCRLineBox? in
+                    guard let candidate = observation.topCandidates(1).first else { return nil }
+                    let text = candidate.string.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard text.isEmpty == false else { return nil }
+                    let box = observation.boundingBox
+                    return OCRLineBox(
+                        text: text,
+                        x: box.origin.x,
+                        y: box.origin.y,
+                        width: box.width,
+                        height: box.height
+                    )
+                }
+                let normalized = lineBoxes
+                    .map(\.text)
                     .joined(separator: "\n")
 
                 guard normalized.isEmpty == false else {
@@ -37,7 +66,12 @@ enum VisionOCRService {
                     return
                 }
 
-                continuation.resume(returning: normalized)
+                continuation.resume(
+                    returning: OCRRecognitionResult(
+                        text: normalized,
+                        lineBoxes: lineBoxes
+                    )
+                )
             }
 
             request.recognitionLevel = .accurate

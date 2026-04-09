@@ -81,6 +81,11 @@ final class ReminderService {
             return eventTitle
         }
 
+        let description = (record.eventDescription ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if description.isEmpty == false {
+            return String(description.prefix(40))
+        }
+
         let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
         if summary.isEmpty == false {
             return String(summary.prefix(40))
@@ -92,7 +97,15 @@ final class ReminderService {
     private func reminderNotes(for record: ScanRecord) -> String {
         var lines: [String] = []
         lines.append("来源：\(record.source)")
-        lines.append("摘要：\(record.summary)")
+        if let description = record.eventDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+           description.isEmpty == false {
+            lines.append("事件描述：\(description)")
+        } else {
+            lines.append("摘要：\(record.summary)")
+        }
+        if record.eventKeywords.isEmpty == false {
+            lines.append("关键词：\(record.eventKeywords.joined(separator: "、"))")
+        }
 
         let rawText = record.recognizedText.trimmingCharacters(in: .whitespacesAndNewlines)
         if rawText.isEmpty == false {

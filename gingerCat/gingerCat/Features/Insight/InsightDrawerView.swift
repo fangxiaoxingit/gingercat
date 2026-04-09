@@ -198,7 +198,7 @@ private struct EventSelectionRow: View {
                     Text(event.title)
                         .font(.subheadline.weight(.medium))
 
-                    Text(event.date, format: Date.FormatStyle(date: .abbreviated, time: .shortened))
+                    Text(AppDateTimeFormatter.string(from: event.date))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

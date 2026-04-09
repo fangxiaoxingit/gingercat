@@ -92,6 +92,9 @@ struct ArchiveView: View {
 
         return records.filter { record in
             record.summary.localizedCaseInsensitiveContains(searchText) ||
+            (record.eventDescription ?? "").localizedCaseInsensitiveContains(searchText) ||
+            (record.eventTitle ?? "").localizedCaseInsensitiveContains(searchText) ||
+            record.eventKeywordsText.localizedCaseInsensitiveContains(searchText) ||
             record.note.localizedCaseInsensitiveContains(searchText)
         }
     }
@@ -118,26 +121,40 @@ private struct ArchiveRowContent: View {
                     .truncationMode(.tail)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(record.createdAt, format: Date.FormatStyle(date: .abbreviated, time: .shortened))
+                    Text(AppDateTimeFormatter.string(from: record.eventDate ?? record.createdAt))
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    HStack(spacing: 6) {
-                        statusTag(
-                            record.resolvedIntent == .schedule ? String(localized: "日程") : String(localized: "总结"),
-                            background: AppTheme.primary.opacity(0.16),
-                            foreground: AppTheme.primary
-                        )
-                        statusTag(
-                            record.isOCRCompleted ? String(localized: "已 OCR") : String(localized: "待 OCR"),
-                            background: record.isOCRCompleted ? Color.green.opacity(0.16) : Color.orange.opacity(0.18),
-                            foreground: record.isOCRCompleted ? .green : .orange
-                        )
-                        statusTag(
-                            record.usedAISummary ? String(localized: "AI 摘要") : String(localized: "本地摘要"),
-                            background: record.usedAISummary ? Color.blue.opacity(0.16) : Color.gray.opacity(0.18),
-                            foreground: record.usedAISummary ? .blue : .secondary
-                        )
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            statusTag(
+                                record.needTodo ? String(localized: "待办") : String(localized: "非待办"),
+                                background: record.needTodo ? Color.red.opacity(0.14) : Color.gray.opacity(0.14),
+                                foreground: record.needTodo ? .red : .secondary
+                            )
+                            statusTag(
+                                record.resolvedIntent == .schedule ? String(localized: "日程") : String(localized: "总结"),
+                                background: AppTheme.primary.opacity(0.16),
+                                foreground: AppTheme.primary
+                            )
+                            statusTag(
+                                record.isOCRCompleted ? String(localized: "已 OCR") : String(localized: "待 OCR"),
+                                background: record.isOCRCompleted ? Color.green.opacity(0.16) : Color.orange.opacity(0.18),
+                                foreground: record.isOCRCompleted ? .green : .orange
+                            )
+                            statusTag(
+                                record.usedAISummary ? String(localized: "AI 摘要") : String(localized: "本地摘要"),
+                                background: record.usedAISummary ? Color.blue.opacity(0.16) : Color.gray.opacity(0.18),
+                                foreground: record.usedAISummary ? .blue : .secondary
+                            )
+                            if record.hasAddedTodoReminder {
+                                statusTag(
+                                    String(localized: "已加待办"),
+                                    background: Color.orange.opacity(0.16),
+                                    foreground: .orange
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -151,8 +168,12 @@ private struct ArchiveRowContent: View {
     }
 
     private var summaryText: String {
-        let trimmed = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? String(localized: "正在识别内容...") : trimmed
+        let description = (record.eventDescription ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if description.isEmpty == false {
+            return description
+        }
+        let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        return summary.isEmpty ? String(localized: "正在识别内容...") : summary
     }
 
     private func statusTag(_ text: String, background: Color, foreground: Color) -> some View {
@@ -166,6 +187,7 @@ private struct ArchiveRowContent: View {
 }
 
 private struct RecordThumbnailView: View {
+    @Environment(\.displayScale) private var displayScale
     let cacheKey: UUID
     let imageData: Data?
     let side: CGFloat
@@ -206,7 +228,7 @@ private struct RecordThumbnailView: View {
             return
         }
 
-        let maxPixel = Int(max(side * UIScreen.main.scale, side))
+        let maxPixel = Int(max(side * max(displayScale, 1), side))
         let decodedImage = decodeThumbnail(from: imageData, maxPixelSize: maxPixel)
         resolvedImage = decodedImage
         if let decodedImage {

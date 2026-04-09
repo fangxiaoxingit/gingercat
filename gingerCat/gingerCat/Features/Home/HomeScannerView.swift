@@ -33,6 +33,8 @@ struct HomeScannerView: View {
     @State private var capturedCameraImage: UIImage?
 
     @State private var activeAlert: HomeAlert?
+    @State private var toastMessage: String?
+    @State private var toastDismissTask: Task<Void, Never>?
     @State private var isSettingsPresented = false
     @State private var isArchivePresented = false
     @State private var selectedPendingRecord: ScanRecord?
@@ -52,6 +54,7 @@ struct HomeScannerView: View {
                 }
 
                 floatingAddButtonLayer
+                toastLayer
             }
             .navigationTitle(String(localized: "首页"))
             .navigationBarTitleDisplayMode(.large)
@@ -112,6 +115,10 @@ struct HomeScannerView: View {
                     message: Text(alert.message),
                     dismissButton: .default(Text(String(localized: "知道了")))
                 )
+            }
+            .onDisappear {
+                toastDismissTask?.cancel()
+                toastDismissTask = nil
             }
         }
     }
@@ -216,7 +223,7 @@ struct HomeScannerView: View {
             if pendingTodos.isEmpty {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(moduleBackgroundColor)
-                    .frame(maxWidth: .infinity, minHeight: 140)
+                    .frame(maxWidth: .infinity, minHeight: 240)
                     .overlay {
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .stroke(cardBorderColor, lineWidth: 1)
@@ -227,8 +234,7 @@ struct HomeScannerView: View {
                             title: String(localized: "暂无待办"),
                             message: String(localized: "识别出时间或事件后，这里会自动出现最近待办。")
                         )
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 26)
+                        .padding(20)
                     }
             } else {
                 VStack(spacing: 0) {
@@ -303,6 +309,26 @@ struct HomeScannerView: View {
         }
         .padding(.trailing, 24)
         .padding(.bottom, 24)
+    }
+
+    @ViewBuilder
+    private var toastLayer: some View {
+        VStack {
+            if let toastMessage {
+                Text(toastMessage)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            Spacer()
+        }
+        .animation(.easeInOut(duration: 0.22), value: toastMessage != nil)
     }
 
     private func pendingTodoRow(_ item: PendingTodoItem) -> some View {
@@ -390,38 +416,43 @@ struct HomeScannerView: View {
 
     private var pendingTodos: [PendingTodoItem] {
         let todoRecords = records
-            .filter { $0.resolvedIntent == .schedule }
+            .filter { record in
+                record.needTodo ||
+                (record.resolvedIntent == .schedule && (record.eventDate ?? .distantPast) > .now)
+            }
             .sorted { lhs, rhs in
                 (lhs.eventDate ?? lhs.createdAt) < (rhs.eventDate ?? rhs.createdAt)
             }
         
         return Array(todoRecords.prefix(3)).map { record in
             let title = record.eventTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let description = record.eventDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
             let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
             let resolvedTitle: String
             if let title, title.isEmpty == false {
                 resolvedTitle = title
+            } else if let description, description.isEmpty == false {
+                resolvedTitle = description
             } else if summary.isEmpty == false {
                 resolvedTitle = summary
             } else {
                 resolvedTitle = String(localized: "未命名待办")
             }
-            let date = record.eventDate ?? record.createdAt
 
             return PendingTodoItem(
                 id: record.id,
                 title: resolvedTitle,
-                timeText: pendingDateFormatter.string(from: date),
+                timeText: pendingTimeText(for: record),
                 record: record
             )
         }
     }
 
-    private var pendingDateFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm"
-        return formatter
+    private func pendingTimeText(for record: ScanRecord) -> String {
+        if let eventDate = record.eventDate {
+            return AppDateTimeFormatter.string(from: eventDate)
+        }
+        return AppDateTimeFormatter.string(from: record.createdAt)
     }
 
     @MainActor
@@ -463,6 +494,7 @@ struct HomeScannerView: View {
         try? modelContext.save()
 
         playSoftHaptic()
+        showEnqueueToast()
         let recordID = record.id
         let runtimeConfig = kimiConfig
         let useAI = aiSummaryEnabled
@@ -494,8 +526,14 @@ struct HomeScannerView: View {
                 intent: .summary,
                 eventTitle: nil,
                 eventDate: nil,
+                eventTime: nil,
+                eventKeywords: [],
+                eventDescription: nil,
+                needTodo: false,
                 isOCRCompleted: false,
-                usedAISummary: false
+                usedAISummary: false,
+                lineBoxes: [],
+                aiFallbackMessage: nil
             )
         }
         #else
@@ -505,42 +543,55 @@ struct HomeScannerView: View {
             intent: .summary,
             eventTitle: nil,
             eventDate: nil,
+            eventTime: nil,
+            eventKeywords: [],
+            eventDescription: nil,
+            needTodo: false,
             isOCRCompleted: false,
-            usedAISummary: false
+            usedAISummary: false,
+            lineBoxes: [],
+            aiFallbackMessage: nil
         )
         #endif
 
         do {
-            let recognizedText = try await VisionOCRService.recognizeText(from: image)
+            let recognition = try await VisionOCRService.recognize(from: image)
             let payload = InsightPayloadBuilder.build(
                 source: source,
-                recognizedText: recognizedText,
+                recognizedText: recognition.text,
                 imageData: imageData
             )
 
-            var finalSummary = payload.summary
-            var usedAI = false
             if aiSummaryEnabled, config.canRequestSummary {
-                if let aiSummary = try? await KimiAIService.summarize(
-                    rawText: payload.rawText,
-                    mode: payload.mode,
-                    events: payload.events,
-                    config: config
-                ) {
-                    finalSummary = aiSummary
-                    usedAI = true
+                do {
+                    let aiInsight = try await KimiAIService.analyzeOCR(
+                        rawText: payload.rawText,
+                        config: config
+                    )
+                    return buildPipelineResultFromAI(
+                        recognizedText: payload.rawText,
+                        localFallbackSummary: payload.summary,
+                        insight: aiInsight,
+                        lineBoxes: recognition.lineBoxes
+                    )
+                } catch {
+                    return buildPipelineResultFromLocal(
+                        payload,
+                        lineBoxes: recognition.lineBoxes,
+                        aiFallbackMessage: String(
+                            localized: "AI 总结请求失败，已回退到本地摘要。\(error.localizedDescription)"
+                        )
+                    )
                 }
+            } else if aiSummaryEnabled {
+                return buildPipelineResultFromLocal(
+                    payload,
+                    lineBoxes: recognition.lineBoxes,
+                    aiFallbackMessage: String(localized: "AI 总结已开启，但 Kimi 配置不完整，已回退到本地摘要。")
+                )
             }
 
-            return OCRPipelineResult(
-                recognizedText: payload.rawText,
-                summary: finalSummary,
-                intent: payload.mode.intent,
-                eventTitle: payload.events.first?.title,
-                eventDate: payload.events.first?.date,
-                isOCRCompleted: true,
-                usedAISummary: usedAI
-            )
+            return buildPipelineResultFromLocal(payload, lineBoxes: recognition.lineBoxes)
         } catch VisionOCRServiceError.noRecognizedText {
             return OCRPipelineResult(
                 recognizedText: "",
@@ -548,8 +599,14 @@ struct HomeScannerView: View {
                 intent: .summary,
                 eventTitle: nil,
                 eventDate: nil,
+                eventTime: nil,
+                eventKeywords: [],
+                eventDescription: nil,
+                needTodo: false,
                 isOCRCompleted: false,
-                usedAISummary: false
+                usedAISummary: false,
+                lineBoxes: [],
+                aiFallbackMessage: nil
             )
         } catch VisionOCRServiceError.invalidImage {
             return OCRPipelineResult(
@@ -558,8 +615,14 @@ struct HomeScannerView: View {
                 intent: .summary,
                 eventTitle: nil,
                 eventDate: nil,
+                eventTime: nil,
+                eventKeywords: [],
+                eventDescription: nil,
+                needTodo: false,
                 isOCRCompleted: false,
-                usedAISummary: false
+                usedAISummary: false,
+                lineBoxes: [],
+                aiFallbackMessage: nil
             )
         } catch {
             return OCRPipelineResult(
@@ -568,8 +631,14 @@ struct HomeScannerView: View {
                 intent: .summary,
                 eventTitle: nil,
                 eventDate: nil,
+                eventTime: nil,
+                eventKeywords: [],
+                eventDescription: nil,
+                needTodo: false,
                 isOCRCompleted: false,
-                usedAISummary: false
+                usedAISummary: false,
+                lineBoxes: [],
+                aiFallbackMessage: nil
             )
         }
     }
@@ -583,9 +652,18 @@ struct HomeScannerView: View {
         record.intent = result.intent.rawValue
         record.eventTitle = result.eventTitle
         record.eventDate = result.eventDate
+        record.eventTime = result.eventTime
+        record.eventKeywordsText = result.eventKeywords.joined(separator: ",")
+        record.eventDescription = result.eventDescription
+        record.needTodo = result.needTodo
         record.isOCRCompleted = result.isOCRCompleted
         record.usedAISummary = result.usedAISummary
+        record.ocrLineBoxes = result.lineBoxes
         try? modelContext.save()
+
+        if let aiFallbackMessage = result.aiFallbackMessage {
+            showToast(aiFallbackMessage, duration: 4_000_000_000)
+        }
 
         if result.isOCRCompleted {
             playSuccessHaptic()
@@ -697,6 +775,127 @@ struct HomeScannerView: View {
         guard trimmed.isEmpty == false else { return nil }
         return Double(trimmed)
     }
+
+    private func buildPipelineResultFromAI(
+        recognizedText: String,
+        localFallbackSummary: String,
+        insight: AIOCRInsight,
+        lineBoxes: [OCRLineBox]
+    ) -> OCRPipelineResult {
+        let resolvedSummary = insight.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? localFallbackSummary
+            : insight.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedTitle = insight.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedDescription = insight.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let normalizedKeywords = Array(
+            insight.keywords
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { $0.isEmpty == false }
+                .prefix(3)
+        )
+        let normalizedTimeValue = normalizedTime(insight.time)
+        let resolvedEventTime = normalizedTimeValue ?? "00:00"
+        let date = parsedEventDate(date: insight.date, time: resolvedEventTime)
+        let todo = insight.needTodo && date != nil
+        let descriptionText = (resolvedDescription?.isEmpty == false) ? resolvedDescription : resolvedSummary
+
+        return OCRPipelineResult(
+            recognizedText: recognizedText,
+            summary: resolvedSummary,
+            intent: todo ? .schedule : .summary,
+            eventTitle: resolvedTitle,
+            eventDate: date,
+            eventTime: normalizedTimeValue,
+            eventKeywords: normalizedKeywords,
+            eventDescription: descriptionText,
+            needTodo: todo,
+            isOCRCompleted: true,
+            usedAISummary: true,
+            lineBoxes: lineBoxes,
+            aiFallbackMessage: nil
+        )
+    }
+
+    private func buildPipelineResultFromLocal(
+        _ payload: InsightPayload,
+        lineBoxes: [OCRLineBox],
+        aiFallbackMessage: String? = nil
+    ) -> OCRPipelineResult {
+        let event = payload.events.first
+        let eventDate = event?.date
+        let needTodo = (eventDate ?? .distantPast) > .now
+        let time = eventDate.map { pendingTimeFormatter.string(from: $0) }
+
+        return OCRPipelineResult(
+            recognizedText: payload.rawText,
+            summary: payload.summary,
+            intent: needTodo ? .schedule : .summary,
+            eventTitle: event?.title,
+            eventDate: eventDate,
+            eventTime: time,
+            eventKeywords: [],
+            eventDescription: payload.summary,
+            needTodo: needTodo,
+            isOCRCompleted: true,
+            usedAISummary: false,
+            lineBoxes: lineBoxes,
+            aiFallbackMessage: aiFallbackMessage
+        )
+    }
+
+    private func parsedEventDate(date: String?, time: String) -> Date? {
+        guard let date else { return nil }
+        let dateText = date.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard dateText.isEmpty == false else { return nil }
+        return eventDateFormatter.date(from: "\(dateText) \(time)")
+    }
+
+    private func normalizedTime(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.range(of: #"^\d{2}:\d{2}$"#, options: .regularExpression) != nil else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private var eventDateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter
+    }
+
+    private var pendingTimeFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }
+
+    @MainActor
+    private func showEnqueueToast() {
+        showToast(
+            String(localized: "已添加，正在解析中，请勿关闭 APP，请稍候再记录列表查看。"),
+            duration: 2_800_000_000
+        )
+    }
+
+    @MainActor
+    private func showToast(_ message: String, duration: UInt64) {
+        toastDismissTask?.cancel()
+        toastMessage = message
+        toastDismissTask = Task {
+            try? await Task.sleep(nanoseconds: duration)
+            guard Task.isCancelled == false else { return }
+            await MainActor.run {
+                withAnimation {
+                    toastMessage = nil
+                }
+            }
+        }
+    }
 }
 
 private struct PendingTodoItem: Identifiable {
@@ -717,8 +916,14 @@ private struct OCRPipelineResult {
     let intent: ScanIntent
     let eventTitle: String?
     let eventDate: Date?
+    let eventTime: String?
+    let eventKeywords: [String]
+    let eventDescription: String?
+    let needTodo: Bool
     let isOCRCompleted: Bool
     let usedAISummary: Bool
+    let lineBoxes: [OCRLineBox]
+    let aiFallbackMessage: String?
 }
 
 private enum OCRCompletionNotificationService {

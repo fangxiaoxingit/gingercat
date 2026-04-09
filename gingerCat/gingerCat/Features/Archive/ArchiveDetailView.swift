@@ -10,14 +10,24 @@ struct ArchiveDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage(KimiSettingsKeys.haptics) private var hapticsEnabled = true
+    @AppStorage(KimiSettingsKeys.baseURL) private var kimiBaseURL = KimiRuntimeConfig.defaultBaseURL
+    @AppStorage(KimiSettingsKeys.model) private var kimiModel = KimiRuntimeConfig.defaultModel
+    @AppStorage(KimiSettingsKeys.apiKey) private var kimiAPIKey = ""
+    @AppStorage(KimiSettingsKeys.maxTokens) private var kimiMaxTokens = ""
+    @AppStorage(KimiSettingsKeys.temperature) private var kimiTemperature = ""
+    @AppStorage(KimiSettingsKeys.topP) private var kimiTopP = ""
 
     @Bindable var record: ScanRecord
     @State private var isImagePreviewPresented = false
     @State private var isSavingReminder = false
+    @State private var isRunningLocalOCR = false
+    @State private var isRunningAISummary = false
     @State private var reminderFeedback: ReminderFeedback?
     @State private var isReminderEditorPresented = false
     @State private var reminderDraft = ReminderDraft.empty
     @State private var isDeleteConfirmationPresented = false
+    @State private var isRepeatTodoConfirmationPresented = false
+    @State private var showRepeatTodoHintInEditor = false
 
     var body: some View {
         ZStack {
@@ -42,11 +52,41 @@ struct ArchiveDetailView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    if record.isOCRCompleted == false {
+                        Button {
+                            Task {
+                                await runLocalOCR()
+                            }
+                        } label: {
+                            Label(
+                                isRunningLocalOCR ? String(localized: "本地OCR处理中...") : String(localized: "本地OCR"),
+                                systemImage: "text.viewfinder"
+                            )
+                        }
+                        .disabled(isRunningLocalOCR || isRunningAISummary)
+                    }
+
+                    if record.usedAISummary == false {
+                        Button {
+                            Task {
+                                await runAISummary()
+                            }
+                        } label: {
+                            Label(
+                                isRunningAISummary ? String(localized: "AI摘要处理中...") : String(localized: "AI 摘要"),
+                                systemImage: "sparkles"
+                            )
+                        }
+                        .disabled(isRunningLocalOCR || isRunningAISummary)
+                    }
+
                     Button {
-                        reminderDraft = ReminderDraft(record: record)
-                        isReminderEditorPresented = true
+                        presentReminderEditor()
                     } label: {
-                        Label(String(localized: "加入待办事项"), systemImage: "checklist")
+                        Label(
+                            record.hasAddedTodoReminder ? String(localized: "再次加入待办事项") : String(localized: "加入待办事项"),
+                            systemImage: "checklist"
+                        )
                     }
 
                     Button(role: .destructive) {
@@ -69,8 +109,10 @@ struct ArchiveDetailView: View {
             ReminderDraftEditorView(
                 draft: $reminderDraft,
                 isSaving: isSavingReminder,
+                showRepeatHint: showRepeatTodoHintInEditor,
                 onCancel: {
                     isReminderEditorPresented = false
+                    showRepeatTodoHintInEditor = false
                 },
                 onSave: {
                     Task {
@@ -92,6 +134,20 @@ struct ArchiveDetailView: View {
         } message: {
             Text(String(localized: "删除后无法恢复。"))
         }
+        .confirmationDialog(
+            String(localized: "这条记录已添加过待办事项"),
+            isPresented: $isRepeatTodoConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "继续添加"), role: .destructive) {
+                showRepeatTodoHintInEditor = true
+                reminderDraft = ReminderDraft(record: record)
+                isReminderEditorPresented = true
+            }
+            Button(String(localized: "取消"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "继续添加会生成重复待办，请确认后再操作。"))
+        }
         .alert(item: $reminderFeedback) { feedback in
             Alert(
                 title: Text(feedback.title),
@@ -104,8 +160,10 @@ struct ArchiveDetailView: View {
     private var detailSections: some View {
         VStack(alignment: .leading, spacing: 14) {
             imageHeroSection
-            summaryCard
-            recognitionCard
+            if record.hasAddedTodoReminder {
+                repeatTodoReminderBanner
+            }
+            mergedRecordCard
             noteCard
         }
     }
@@ -158,45 +216,30 @@ struct ArchiveDetailView: View {
         }
     }
 
-    private var summaryCard: some View {
+    private var repeatTodoReminderBanner: some View {
         GlassCard {
-            VStack(alignment: .leading, spacing: 8) {
-                Label(String(localized: "摘要信息"), systemImage: "text.quote")
-                    .font(.headline)
-                Text(record.summary)
-                    .font(.body)
-                Divider()
-                LabeledContent(String(localized: "来源"), value: record.source)
-                LabeledContent(String(localized: "创建时间")) {
-                    Text(record.createdAt, format: Date.FormatStyle(date: .abbreviated, time: .shortened))
-                }
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text(String(localized: "这条记录已添加过待办事项，再次添加前请确认是否需要重复创建。"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
     }
 
-    private var recognitionCard: some View {
+    private var mergedRecordCard: some View {
         GlassCard {
-            VStack(alignment: .leading, spacing: 10) {
-                Label(String(localized: "识别结果"), systemImage: "checkmark.seal")
+            VStack(alignment: .leading, spacing: 12) {
+                Label(String(localized: "记录信息"), systemImage: "text.quote")
                     .font(.headline)
-
-                Text(record.recognizedText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(2)
 
                 Divider()
 
-                LabeledContent(String(localized: "模式"), value: record.resolvedIntent == .schedule ? String(localized: "日程") : String(localized: "总结"))
-                LabeledContent(String(localized: "事件时间")) {
-                    if let eventDate = record.eventDate {
-                        Text(eventDate, format: Date.FormatStyle(date: .abbreviated, time: .shortened))
-                    } else {
-                        Text(String(localized: "无"))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                LabeledContent(String(localized: "事件标题"), value: record.eventTitle ?? String(localized: "无"))
+                LabeledContent(String(localized: "标题"), value: resolvedTitle)
+                LabeledContent(String(localized: "详细内容"), value: resolvedDetailText)
+                LabeledContent(String(localized: "关键词"), value: resolvedKeywords)
+                LabeledContent(String(localized: "日期时间"), value: AppDateTimeFormatter.string(from: record.eventDate ?? record.createdAt))
             }
         }
     }
@@ -241,7 +284,10 @@ struct ArchiveDetailView: View {
                 notes: reminderDraft.notes,
                 dueDate: reminderDraft.hasDueDate ? reminderDraft.dueDate : nil
             )
+            record.hasAddedTodoReminder = true
+            try? modelContext.save()
             isReminderEditorPresented = false
+            showRepeatTodoHintInEditor = false
             reminderFeedback = ReminderFeedback(
                 title: String(localized: "添加成功"),
                 message: String(localized: "已加入系统提醒事项，你可以前往提醒事项 App 查看。")
@@ -270,6 +316,262 @@ struct ArchiveDetailView: View {
         let generator = UIImpactFeedbackGenerator(style: .soft)
         generator.impactOccurred()
         #endif
+    }
+
+    private func presentReminderEditor() {
+        if record.hasAddedTodoReminder {
+            isRepeatTodoConfirmationPresented = true
+            return
+        }
+
+        showRepeatTodoHintInEditor = false
+        reminderDraft = ReminderDraft(record: record)
+        isReminderEditorPresented = true
+    }
+
+    @MainActor
+    private func runLocalOCR() async {
+        guard isRunningLocalOCR == false else { return }
+        guard let image = resolvedImage else {
+            reminderFeedback = ReminderFeedback(
+                title: String(localized: "本地OCR失败"),
+                message: String(localized: "当前记录没有可用图片，无法执行本地OCR。")
+            )
+            return
+        }
+
+        isRunningLocalOCR = true
+        defer { isRunningLocalOCR = false }
+
+        do {
+            let recognition = try await VisionOCRService.recognize(from: image)
+            applyLocalOCRResult(recognition)
+            reminderFeedback = ReminderFeedback(
+                title: String(localized: "本地OCR完成"),
+                message: String(localized: "已更新标题、详细内容、关键词和日期时间。")
+            )
+        } catch VisionOCRServiceError.noRecognizedText {
+            reminderFeedback = ReminderFeedback(
+                title: String(localized: "本地OCR失败"),
+                message: String(localized: "未识别到可用文字，请更换更清晰的图片。")
+            )
+        } catch {
+            reminderFeedback = ReminderFeedback(
+                title: String(localized: "本地OCR失败"),
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    @MainActor
+    private func runAISummary() async {
+        guard isRunningAISummary == false else { return }
+
+        let config = kimiConfig
+        guard config.canRequestSummary else {
+            reminderFeedback = ReminderFeedback(
+                title: String(localized: "AI摘要失败"),
+                message: String(localized: "Kimi 配置不完整，请先到设置中补全 Base URL、Model 与 API Key。")
+            )
+            return
+        }
+
+        isRunningAISummary = true
+        defer { isRunningAISummary = false }
+
+        do {
+            let recognition = try await ensureRecognitionForAI()
+            let payload = InsightPayloadBuilder.build(
+                source: record.source,
+                recognizedText: recognition.text,
+                imageData: record.imageData
+            )
+            let insight = try await KimiAIService.analyzeOCR(
+                rawText: payload.rawText,
+                config: config
+            )
+            applyAIResult(
+                recognizedText: payload.rawText,
+                localFallbackSummary: payload.summary,
+                insight: insight,
+                lineBoxes: recognition.lineBoxes
+            )
+            reminderFeedback = ReminderFeedback(
+                title: String(localized: "AI摘要完成"),
+                message: String(localized: "已更新标题、详细内容、关键词和日期时间。")
+            )
+        } catch let error as KimiAIServiceError {
+            reminderFeedback = ReminderFeedback(
+                title: String(localized: "AI摘要失败"),
+                message: error.localizedDescription
+            )
+        } catch VisionOCRServiceError.noRecognizedText {
+            reminderFeedback = ReminderFeedback(
+                title: String(localized: "AI摘要失败"),
+                message: String(localized: "执行AI摘要前未识别到可用文字，请先确保图片内容清晰。")
+            )
+        } catch {
+            reminderFeedback = ReminderFeedback(
+                title: String(localized: "AI摘要失败"),
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    private func applyLocalOCRResult(_ recognition: OCRRecognitionResult) {
+        let payload = InsightPayloadBuilder.build(
+            source: record.source,
+            recognizedText: recognition.text,
+            imageData: record.imageData
+        )
+        let event = payload.events.first
+        let eventDate = event?.date
+        let needTodo = (eventDate ?? .distantPast) > .now
+
+        record.recognizedText = recognition.text
+        record.ocrLineBoxes = recognition.lineBoxes
+        record.summary = payload.summary
+        record.intent = (needTodo ? ScanIntent.schedule : ScanIntent.summary).rawValue
+        record.eventTitle = event?.title
+        record.eventDate = eventDate
+        record.eventTime = eventDate.map { pendingTimeFormatter.string(from: $0) }
+        record.eventKeywordsText = ""
+        record.eventDescription = payload.summary
+        record.needTodo = needTodo
+        record.isOCRCompleted = true
+        record.usedAISummary = false
+        try? modelContext.save()
+    }
+
+    private func applyAIResult(
+        recognizedText: String,
+        localFallbackSummary: String,
+        insight: AIOCRInsight,
+        lineBoxes: [OCRLineBox]
+    ) {
+        let resolvedSummary = insight.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? localFallbackSummary
+            : insight.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedTitle = insight.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedDescription = insight.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedKeywords = Array(
+            insight.keywords
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { $0.isEmpty == false }
+                .prefix(3)
+        )
+        let normalizedTimeValue = normalizedTime(insight.time)
+        let resolvedEventTime = normalizedTimeValue ?? "00:00"
+        let date = parsedEventDate(date: insight.date, time: resolvedEventTime)
+        let needTodo = insight.needTodo && date != nil
+        let descriptionText = (resolvedDescription?.isEmpty == false) ? resolvedDescription : resolvedSummary
+
+        record.recognizedText = recognizedText
+        record.ocrLineBoxes = lineBoxes
+        record.summary = resolvedSummary
+        record.intent = (needTodo ? ScanIntent.schedule : ScanIntent.summary).rawValue
+        record.eventTitle = resolvedTitle
+        record.eventDate = date
+        record.eventTime = normalizedTimeValue
+        record.eventKeywordsText = normalizedKeywords.joined(separator: ",")
+        record.eventDescription = descriptionText
+        record.needTodo = needTodo
+        record.isOCRCompleted = true
+        record.usedAISummary = true
+        try? modelContext.save()
+    }
+
+    private func ensureRecognitionForAI() async throws -> OCRRecognitionResult {
+        let existingText = record.recognizedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if existingText.isEmpty == false {
+            return OCRRecognitionResult(text: existingText, lineBoxes: record.ocrLineBoxes)
+        }
+
+        guard let image = resolvedImage else {
+            throw VisionOCRServiceError.invalidImage
+        }
+        return try await VisionOCRService.recognize(from: image)
+    }
+
+    private func parsedEventDate(date: String?, time: String) -> Date? {
+        guard let date else { return nil }
+        let dateText = date.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard dateText.isEmpty == false else { return nil }
+        return eventDateFormatter.date(from: "\(dateText) \(time)")
+    }
+
+    private func normalizedTime(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.range(of: #"^\d{2}:\d{2}$"#, options: .regularExpression) != nil else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private var eventDateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter
+    }
+
+    private var pendingTimeFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }
+
+    private var resolvedTitle: String {
+        let title = (record.eventTitle ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if title.isEmpty == false {
+            return title
+        }
+        let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        return summary.isEmpty ? String(localized: "无") : String(summary.prefix(40))
+    }
+
+    private var resolvedDetailText: String {
+        let description = (record.eventDescription ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if description.isEmpty == false {
+            return description
+        }
+        let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        return summary.isEmpty ? String(localized: "无") : summary
+    }
+
+    private var resolvedKeywords: String {
+        let keywords = record.eventKeywords
+        return keywords.isEmpty ? String(localized: "无") : keywords.joined(separator: " / ")
+    }
+
+    private var kimiConfig: KimiRuntimeConfig {
+        KimiRuntimeConfig(
+            baseURL: sanitized(kimiBaseURL, fallback: KimiRuntimeConfig.defaultBaseURL),
+            model: sanitized(kimiModel, fallback: KimiRuntimeConfig.defaultModel),
+            apiKey: kimiAPIKey.trimmingCharacters(in: .whitespacesAndNewlines),
+            maxTokens: parseInt(kimiMaxTokens),
+            temperature: parseDouble(kimiTemperature),
+            topP: parseDouble(kimiTopP)
+        )
+    }
+
+    private func sanitized(_ value: String, fallback: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallback : trimmed
+    }
+
+    private func parseInt(_ value: String) -> Int? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return nil }
+        return Int(trimmed)
+    }
+
+    private func parseDouble(_ value: String) -> Double? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return nil }
+        return Double(trimmed)
     }
 }
 
@@ -437,7 +739,7 @@ private struct ReminderDraft {
         if let eventTitle = record.eventTitle?.trimmingCharacters(in: .whitespacesAndNewlines), eventTitle.isEmpty == false {
             resolvedTitle = eventTitle
         } else {
-            let fallback = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+            let fallback = (record.eventDescription ?? record.summary).trimmingCharacters(in: .whitespacesAndNewlines)
             resolvedTitle = fallback.isEmpty ? String(localized: "识别记录提醒") : String(fallback.prefix(40))
         }
 
@@ -446,24 +748,40 @@ private struct ReminderDraft {
         if note.isEmpty == false {
             noteLines.append(note)
         }
-        noteLines.append(String(localized: "摘要：\(record.summary)"))
+        if let description = record.eventDescription?.trimmingCharacters(in: .whitespacesAndNewlines), description.isEmpty == false {
+            noteLines.append(String(localized: "事件描述：\(description)"))
+        } else {
+            noteLines.append(String(localized: "摘要：\(record.summary)"))
+        }
+        if record.eventKeywords.isEmpty == false {
+            noteLines.append(String(localized: "关键词：\(record.eventKeywords.joined(separator: "、"))"))
+        }
 
         self.title = resolvedTitle
         self.notes = noteLines.joined(separator: "\n")
         self.dueDate = record.eventDate ?? Calendar.current.date(byAdding: .hour, value: 1, to: .now) ?? .now
-        self.hasDueDate = true
+        self.hasDueDate = record.needTodo && record.eventDate != nil
     }
 }
 
 private struct ReminderDraftEditorView: View {
     @Binding var draft: ReminderDraft
     let isSaving: Bool
+    let showRepeatHint: Bool
     let onCancel: () -> Void
     let onSave: () -> Void
 
     var body: some View {
         NavigationStack {
             Form {
+                if showRepeatHint {
+                    Section {
+                        Text(String(localized: "这条记录已经添加过待办事项，请再次确认是否需要重复创建。"))
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
+                }
+
                 Section(String(localized: "待办内容")) {
                     TextField(String(localized: "标题"), text: $draft.title)
                     TextField(String(localized: "备注"), text: $draft.notes, axis: .vertical)
