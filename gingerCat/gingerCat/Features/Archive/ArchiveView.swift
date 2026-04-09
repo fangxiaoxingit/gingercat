@@ -50,14 +50,10 @@ struct ArchiveView: View {
                         .background(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .fill(rowCardBackgroundColor)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .stroke(rowCardBorderColor, lineWidth: 1)
-                                )
-                                .shadow(color: rowCardShadowColor, radius: 8, x: 0, y: 4)
+                                .shadow(color: rowCardShadowColor, radius: 12, x: 0, y: 6)
                         )
                         .padding(.horizontal, 16)
-                        .padding(.vertical, 4)
+                        .padding(.vertical, 8)
                 }
                 .buttonStyle(.plain)
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -115,16 +111,10 @@ struct ArchiveView: View {
             : .white
     }
 
-    private var rowCardBorderColor: Color {
-        colorScheme == .dark
-            ? Color.white.opacity(0.08)
-            : Color.black.opacity(0.05)
-    }
-
     private var rowCardShadowColor: Color {
         colorScheme == .dark
-            ? Color.black.opacity(0.16)
-            : Color.black.opacity(0.04)
+            ? Color.black.opacity(0.22)
+            : Color.black.opacity(0.08)
     }
 }
 

@@ -39,6 +39,8 @@ struct HomeScannerView: View {
     @State private var isSettingsPresented = false
     @State private var isArchivePresented = false
     @State private var selectedPendingRecord: ScanRecord?
+    @State private var revealedQuickAddActions: Set<QuickAddAction> = []
+    @State private var quickAddAnimationTask: Task<Void, Never>?
     @ObservedObject private var recordNavigationCenter = RecordNavigationCenter.shared
     @GestureState private var isQuickAddPressed = false
 
@@ -159,6 +161,8 @@ struct HomeScannerView: View {
                 )
             }
             .onDisappear {
+                quickAddAnimationTask?.cancel()
+                quickAddAnimationTask = nil
                 toastDismissTask?.cancel()
                 toastDismissTask = nil
             }
@@ -222,31 +226,23 @@ struct HomeScannerView: View {
             }
 
             if records.isEmpty {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(moduleBackgroundColor)
-                    .frame(height: 240)
-                    .homeRegularGlass(cornerRadius: 16, tint: cardGlassTint, enabled: colorScheme == .light)
-                    .overlay {
-                        homeEmptyState(
-                            systemImage: "photo.on.rectangle.angled",
-                            title: String(localized: "暂无记录"),
-                            message: String(localized: "扫描图片后，最近三条记录会展示在这里。")
-                        )
-                        .padding(20)
-                    }
+                homeSectionCard(height: 240) {
+                    homeEmptyState(
+                        systemImage: "photo.on.rectangle.angled",
+                        title: String(localized: "暂无记录"),
+                        message: String(localized: "扫描图片后，最近三条记录会展示在这里。")
+                    )
+                    .padding(20)
+                }
             } else {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(moduleBackgroundColor)
-                    .frame(height: 240)
-                    .homeRegularGlass(cornerRadius: 16, tint: cardGlassTint, enabled: colorScheme == .light)
-                    .overlay {
-                        HomeRecordCollage(records: Array(records.prefix(3))) { record in
-                            triggerHaptic()
-                            selectedPendingRecord = record
-                        }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
+                homeSectionCard(height: 240) {
+                    HomeRecordCollage(records: Array(records.prefix(3))) { record in
+                        triggerHaptic()
+                        selectedPendingRecord = record
                     }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                }
             }
         }
     }
@@ -265,48 +261,64 @@ struct HomeScannerView: View {
             }
 
             if pendingTodos.isEmpty {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(moduleBackgroundColor)
-                    .frame(maxWidth: .infinity, minHeight: 240)
-                    .homeRegularGlass(cornerRadius: 16, tint: cardGlassTint, enabled: colorScheme == .light)
-                    .overlay {
-                        homeEmptyState(
-                            systemImage: "checklist",
-                            title: String(localized: "暂无待办"),
-                            message: String(localized: "识别出时间或事件后，这里会自动出现最近待办。")
-                        )
-                        .padding(20)
-                    }
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(pendingTodos.enumerated()), id: \.element.id) { index, item in
-                        Button {
-                            triggerHaptic()
-                            selectedPendingRecord = item.record
-                        } label: {
-                            pendingTodoRow(item)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 14)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-
-                        if index < pendingTodos.count - 1 {
-                            Divider()
-                                .padding(.leading, 56)
-                        }
-                    }
+                homeSectionCard(height: 240) {
+                    homeEmptyState(
+                        systemImage: "checklist",
+                        title: String(localized: "暂无待办"),
+                        message: String(localized: "识别出时间或事件后，这里会自动出现最近待办。")
+                    )
+                    .padding(20)
                 }
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(moduleBackgroundColor)
-                        .homeRegularGlass(cornerRadius: 16, tint: cardGlassTint, enabled: colorScheme == .light)
-                )
+            } else {
+                homeSectionCard(minHeight: 240, alignment: .topLeading) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(pendingTodos.enumerated()), id: \.element.id) { index, item in
+                            Button {
+                                triggerHaptic()
+                                selectedPendingRecord = item.record
+                            } label: {
+                                pendingTodoRow(item)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 14)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+
+                            if index < pendingTodos.count - 1 {
+                                Divider()
+                                    .padding(.leading, 56)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
             }
         }
+    }
+
+    private func homeSectionCard<Content: View>(
+        height: CGFloat? = nil,
+        minHeight: CGFloat? = nil,
+        alignment: Alignment = .center,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        ZStack(alignment: alignment) {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(moduleBackgroundColor)
+
+            content()
+        }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: minHeight)
+        .frame(height: height)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(
+            color: colorScheme == .dark ? Color.black.opacity(0.22) : Color.black.opacity(0.08),
+            radius: colorScheme == .dark ? 14 : 12,
+            x: 0,
+            y: colorScheme == .dark ? 8 : 6
+        )
     }
 
     private func homeEmptyState(systemImage: String, title: String, message: String) -> some View {
@@ -393,26 +405,31 @@ struct HomeScannerView: View {
     }
 
     private var addMenuCluster: some View {
-        ZStack(alignment: .bottomTrailing) {
-            if isAddMenuExpanded {
-                addMenuActionButtons
+        quickAddButton
+            .background(alignment: .center) {
+                addMenuActionButtonsLayout
+                    .frame(width: 220, height: 220)
+                    .allowsHitTesting(isAddMenuExpanded)
             }
-
-            quickAddButton
-                .zIndex(1)
-        }
     }
 
-    private var addMenuActionButtons: some View {
-        ForEach(QuickAddAction.allCases) { action in
-            AddMenuActionButton(
-                systemImage: action.systemImage,
-                tint: AppTheme.primary
-            ) {
-                handleQuickAddAction(action)
+    private var addMenuActionButtonsLayout: some View {
+        ZStack {
+            ForEach(QuickAddAction.allCases) { action in
+                let isVisible = revealedQuickAddActions.contains(action)
+                AddMenuActionButton(
+                    systemImage: action.systemImage,
+                    tint: AppTheme.primary
+                ) {
+                    handleQuickAddAction(action)
+                }
+                .offset(x: isVisible ? action.offset.width : 0, y: isVisible ? action.offset.height : 0)
+                .scaleEffect(isVisible ? 1 : 0.18, anchor: .center)
+                .opacity(isVisible ? 1 : 0)
+                .brightness(isVisible ? 0 : 0.05)
+                .allowsHitTesting(isVisible)
+                .zIndex(Double(action.animationIndex))
             }
-            .offset(action.offset)
-            .transition(.scale(scale: 0.82).combined(with: .opacity))
         }
     }
 
@@ -460,16 +477,8 @@ struct HomeScannerView: View {
         colorScheme == .dark ? Color(uiColor: .secondarySystemBackground) : .white
     }
 
-    private var cardGlassTint: Color {
-        colorScheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.03)
-    }
-
     private var accentGlassTint: Color {
         colorScheme == .dark ? Color.white.opacity(0.24) : Color.black.opacity(0.05)
-    }
-
-    private var pendingTodoPrimaryTextColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.96) : Color.black.opacity(0.86)
     }
 
     private var pendingTodoSecondaryTextColor: Color {
@@ -905,41 +914,76 @@ struct HomeScannerView: View {
     @MainActor
     private func toggleAddMenu() {
         triggerHaptic()
-        withAnimation(.spring(response: 0.24, dampingFraction: 0.82)) {
-            isAddMenuExpanded.toggle()
+        if isAddMenuExpanded {
+            collapseAddMenu()
+        } else {
+            expandAddMenu()
         }
     }
 
     @MainActor
     private func collapseAddMenu() {
         guard isAddMenuExpanded else { return }
-        withAnimation(.spring(response: 0.24, dampingFraction: 0.82)) {
-            isAddMenuExpanded = false
+        quickAddAnimationTask?.cancel()
+        quickAddAnimationTask = Task { @MainActor in
+            await animateQuickAddMenuCollapse()
         }
     }
 
     // 菜单点击后先收起圆环，再分发到具体入口，避免出现弹窗时菜单还停留在页面上。
     @MainActor
     private func handleQuickAddAction(_ action: QuickAddAction) {
-        collapseAddMenu()
-        triggerHaptic()
+        quickAddAnimationTask?.cancel()
+        quickAddAnimationTask = Task { @MainActor in
+            await animateQuickAddMenuCollapse()
+            triggerHaptic()
 
-        switch action {
-        case .text:
-            pendingTextInput = ""
-            pendingAddConfirmation = PendingAddConfirmation(
-                kind: .text,
-                image: nil,
-                source: "Text",
-                title: String(localized: "确认添加文字")
-            )
-        case .photo:
-            isPhotoPickerPresented = true
-        case .camera:
-            Task {
-                await startCameraFlow()
+            switch action {
+            case .text:
+                pendingTextInput = ""
+                pendingAddConfirmation = PendingAddConfirmation(
+                    kind: .text,
+                    image: nil,
+                    source: "Text",
+                    title: String(localized: "确认添加文字")
+                )
+            case .photo:
+                isPhotoPickerPresented = true
+            case .camera:
+                Task {
+                    await startCameraFlow()
+                }
             }
         }
+    }
+
+    @MainActor
+    private func expandAddMenu() {
+        quickAddAnimationTask?.cancel()
+        isAddMenuExpanded = true
+        revealedQuickAddActions.removeAll()
+        quickAddAnimationTask = Task { @MainActor in
+            for action in QuickAddAction.allCases.sorted(by: { $0.animationIndex < $1.animationIndex }) {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                    revealedQuickAddActions.insert(action)
+                }
+                try? await Task.sleep(for: .milliseconds(55))
+            }
+        }
+    }
+
+    @MainActor
+    private func animateQuickAddMenuCollapse() async {
+        guard isAddMenuExpanded else { return }
+
+        for action in QuickAddAction.allCases.sorted(by: { $0.animationIndex > $1.animationIndex }) {
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.88)) {
+                revealedQuickAddActions.remove(action)
+            }
+            try? await Task.sleep(for: .milliseconds(40))
+        }
+
+        isAddMenuExpanded = false
     }
 
     private func buildPipelineResultFromAI(
@@ -1279,6 +1323,17 @@ private enum QuickAddAction: CaseIterable, Identifiable {
 
     var id: Self { self }
 
+    var animationIndex: Int {
+        switch self {
+        case .camera:
+            return 0
+        case .text:
+            return 1
+        case .photo:
+            return 2
+        }
+    }
+
     var systemImage: String {
         switch self {
         case .text:
@@ -1297,9 +1352,9 @@ private enum QuickAddAction: CaseIterable, Identifiable {
 
         switch self {
         case .text:
-            angle = 135
-        case .photo:
             angle = 180
+        case .photo:
+            angle = 135
         case .camera:
             angle = 90
         }
@@ -1320,29 +1375,58 @@ private struct AddMenuActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            Circle()
-                .fill(buttonFillColor)
-                .frame(width: 54, height: 54)
-                .overlay {
-                    Circle()
-                        .stroke(buttonBorderColor, lineWidth: 1)
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(iconColor)
+                .frame(width: 56, height: 56)
+                .background {
+                    if #available(iOS 26.0, *) {
+                        Circle()
+                            .fill(Color.clear)
+                    } else {
+                        Circle()
+                            .fill(buttonFillColor)
+                    }
                 }
-                .overlay {
-                    Image(systemName: systemImage)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(tint)
-                }
-                .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
         }
         .buttonStyle(.plain)
+        .modifier(AddMenuActionGlassModifier(tint: tint, colorScheme: colorScheme))
+    }
+
+    private var iconColor: Color {
+        colorScheme == .dark ? .white : tint
     }
 
     private var buttonFillColor: Color {
         colorScheme == .dark ? Color(uiColor: .secondarySystemBackground) : .white
     }
+}
 
-    private var buttonBorderColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
+private struct AddMenuActionGlassModifier: ViewModifier {
+    let tint: Color
+    let colorScheme: ColorScheme
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(
+                    .regular.tint(glassTint).interactive(),
+                    in: .circle
+                )
+                .shadow(color: shadowColor, radius: 8, x: 0, y: 4)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Circle())
+                .shadow(color: shadowColor, radius: 8, x: 0, y: 4)
+        }
+    }
+
+    private var glassTint: Color {
+        colorScheme == .dark ? Color.white.opacity(0.12) : tint.opacity(0.12)
+    }
+
+    private var shadowColor: Color {
+        colorScheme == .dark ? Color.black.opacity(0.24) : Color.black.opacity(0.12)
     }
 }
 
@@ -1447,14 +1531,6 @@ private struct HomeCollageCard: View {
         }
         .frame(width: 120, height: 120)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(
-                    isFront ? AppTheme.primary.opacity(colorScheme == .dark ? 0.82 : 0.58) : AppTheme.primary.opacity(colorScheme == .dark ? 0.48 : 0.32),
-                    lineWidth: isFront ? 2.5 : 1
-                )
-        }
-        .homeRegularGlass(cornerRadius: 14, tint: glassTint, enabled: colorScheme == .light)
         .shadow(color: shadowColor, radius: 8, x: 0, y: 3)
     }
 
@@ -1485,12 +1561,12 @@ private struct HomeCollageCard: View {
         colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.72)
     }
 
-    private var glassTint: Color {
-        colorScheme == .dark ? Color.white.opacity(0.08) : AppTheme.primary.opacity(0.10)
-    }
-
     private var shadowColor: Color {
-        colorScheme == .dark ? Color.black.opacity(0.28) : AppTheme.primary.opacity(0.10)
+        if colorScheme == .dark {
+            return Color.black.opacity(isFront ? 0.32 : 0.22)
+        } else {
+            return Color.black.opacity(isFront ? 0.12 : 0.08)
+        }
     }
 }
 
