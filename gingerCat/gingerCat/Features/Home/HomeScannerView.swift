@@ -166,7 +166,12 @@ struct HomeScannerView: View {
     }
 
     private var homeBackground: some View {
-        Color(uiColor: .systemBackground)
+        // 首页容器需要比模块卡片更浅一层，避免白色卡片与页面底色混在一起。
+        Color(
+            uiColor: colorScheme == .dark
+                ? .systemBackground
+                : .systemGroupedBackground
+        )
             .ignoresSafeArea()
     }
 
@@ -220,10 +225,7 @@ struct HomeScannerView: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(moduleBackgroundColor)
                     .frame(height: 240)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(cardBorderColor, lineWidth: 1)
-                    }
+                    .homeRegularGlass(cornerRadius: 16, tint: cardGlassTint, enabled: colorScheme == .light)
                     .overlay {
                         homeEmptyState(
                             systemImage: "photo.on.rectangle.angled",
@@ -236,10 +238,6 @@ struct HomeScannerView: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(moduleBackgroundColor)
                     .frame(height: 240)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(cardBorderColor, lineWidth: 1)
-                    }
                     .homeRegularGlass(cornerRadius: 16, tint: cardGlassTint, enabled: colorScheme == .light)
                     .overlay {
                         HomeRecordCollage(records: Array(records.prefix(3))) { record in
@@ -270,10 +268,7 @@ struct HomeScannerView: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(moduleBackgroundColor)
                     .frame(maxWidth: .infinity, minHeight: 240)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(cardBorderColor, lineWidth: 1)
-                    }
+                    .homeRegularGlass(cornerRadius: 16, tint: cardGlassTint, enabled: colorScheme == .light)
                     .overlay {
                         homeEmptyState(
                             systemImage: "checklist",
@@ -308,10 +303,7 @@ struct HomeScannerView: View {
                 .background(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .fill(moduleBackgroundColor)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(cardBorderColor, lineWidth: 1)
-                        )
+                        .homeRegularGlass(cornerRadius: 16, tint: cardGlassTint, enabled: colorScheme == .light)
                 )
             }
         }
@@ -474,10 +466,6 @@ struct HomeScannerView: View {
 
     private var accentGlassTint: Color {
         colorScheme == .dark ? Color.white.opacity(0.24) : Color.black.opacity(0.05)
-    }
-
-    private var cardBorderColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.24) : Color.black.opacity(0.16)
     }
 
     private var pendingTodoPrimaryTextColor: Color {

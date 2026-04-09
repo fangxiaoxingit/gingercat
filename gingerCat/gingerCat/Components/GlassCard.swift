@@ -18,18 +18,12 @@ struct GlassCard<Content: View>: View {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(colorScheme == .dark ? Color(uiColor: .secondarySystemBackground) : .white)
             }
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(
-                        colorScheme == .dark ? .white.opacity(0.10) : .black.opacity(0.06),
-                        lineWidth: 1
-                    )
-            )
+            // 模块之间改用阴影分层，避免统一灰边框让卡片显得生硬。
             .shadow(
-                color: colorScheme == .dark ? .clear : .black.opacity(0.04),
-                radius: 8,
+                color: colorScheme == .dark ? .black.opacity(0.22) : .black.opacity(0.08),
+                radius: colorScheme == .dark ? 14 : 12,
                 x: 0,
-                y: 3
+                y: colorScheme == .dark ? 8 : 6
             )
     }
 }
