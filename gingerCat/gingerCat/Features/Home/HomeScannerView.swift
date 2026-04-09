@@ -29,6 +29,7 @@ struct HomeScannerView: View {
     @State private var activeAlert: HomeAlert?
     @State private var toastMessage: String?
     @State private var toastDismissTask: Task<Void, Never>?
+    @State private var pendingAddConfirmation: PendingAddConfirmation?
     @State private var isSettingsPresented = false
     @State private var isArchivePresented = false
     @State private var selectedPendingRecord: ScanRecord?
@@ -81,6 +82,24 @@ struct HomeScannerView: View {
                 CameraCaptureView(capturedImage: $capturedCameraImage)
                     .ignoresSafeArea()
             }
+            .fullScreenCover(item: $pendingAddConfirmation) { pending in
+                PendingImageAddConfirmationView(
+                    image: pending.image,
+                    aiSummaryEnabled: aiSummaryEnabled,
+                    config: AIProviderConfigStore.selectedRuntimeConfig(),
+                    onCancel: {
+                        pendingAddConfirmation = nil
+                    },
+                    onConfirm: {
+                        let image = pending.image
+                        let source = pending.source
+                        pendingAddConfirmation = nil
+                        Task {
+                            await enqueueImageForRecognition(image, source: source)
+                        }
+                    }
+                )
+            }
             .onChange(of: selectedPhotoItem) { _, newItem in
                 guard let newItem else { return }
                 Task {
@@ -89,10 +108,8 @@ struct HomeScannerView: View {
             }
             .onChange(of: capturedCameraImage) { _, newImage in
                 guard let newImage else { return }
-                Task {
-                    await enqueueImageForRecognition(newImage, source: "Camera")
-                    capturedCameraImage = nil
-                }
+                presentPendingAddConfirmation(for: newImage, source: "Camera")
+                capturedCameraImage = nil
             }
             .onAppear {
                 openPendingNotificationRecordIfNeeded()
@@ -204,7 +221,7 @@ struct HomeScannerView: View {
     private var pendingTodosSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(String(localized: "最近待办事项"))
+                Text(String(localized: "最近待办"))
                     .font(.title3.weight(.medium))
                     .foregroundStyle(.primary)
                 
@@ -327,15 +344,16 @@ struct HomeScannerView: View {
 
     private func pendingTodoRow(_ item: PendingTodoItem) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "checkmark.circle")
-                .font(.system(size: 28, weight: .regular))
-                .foregroundStyle(pendingTodoPrimaryTextColor)
-                .frame(width: 34, height: 34)
+            Image(systemName: "circle")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(AppTheme.primary)
+                .frame(width: 22, height: 22)
+                .padding(.top, 3)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(item.title)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(pendingTodoPrimaryTextColor)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AppTheme.primary)
                     .lineLimit(2)
 
                 Text(item.timeText)
@@ -461,10 +479,15 @@ struct HomeScannerView: View {
                 activeAlert = HomeAlert(message: String(localized: "图片加载失败，请换一张图片重试。"))
                 return
             }
-            await enqueueImageForRecognition(image, source: "Photo")
+            presentPendingAddConfirmation(for: image, source: "Photo")
         } catch {
             activeAlert = HomeAlert(message: String(localized: "读取照片失败，请稍后重试。"))
         }
+    }
+
+    @MainActor
+    private func presentPendingAddConfirmation(for image: UIImage, source: String) {
+        pendingAddConfirmation = PendingAddConfirmation(image: image, source: source)
     }
 
     @MainActor
@@ -843,7 +866,7 @@ struct HomeScannerView: View {
     @MainActor
     private func showEnqueueToast() {
         showToast(
-            String(localized: "已添加，正在解析中，请勿关闭 APP，请稍候再记录列表查看。"),
+            String(localized: "已加入记录，请稍候查看结果。"),
             duration: 2_800_000_000
         )
     }
@@ -869,6 +892,12 @@ private struct PendingTodoItem: Identifiable {
     let title: String
     let timeText: String
     let record: ScanRecord
+}
+
+private struct PendingAddConfirmation: Identifiable {
+    let id = UUID()
+    let image: UIImage
+    let source: String
 }
 
 private struct HomeAlert: Identifiable {
@@ -915,6 +944,103 @@ private enum OCRCompletionNotificationService {
         } catch {
             // Silent fail: local notification should not interrupt main OCR flow.
         }
+    }
+}
+
+private struct PendingImageAddConfirmationView: View {
+    let image: UIImage
+    let aiSummaryEnabled: Bool
+    let config: AIProviderRuntimeConfig
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color(uiColor: .systemBackground)
+                    .ignoresSafeArea()
+
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 20) {
+                        imagePreviewCard
+
+                        VStack(spacing: 6) {
+                            Text(aiSummaryStatusText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            Text(modelInfoText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.horizontal, 24)
+                    }
+                    .padding(.top, 20)
+                    .padding(.bottom, 24)
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .navigationTitle(String(localized: "确认添加图片"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(Color(uiColor: .systemBackground), for: .navigationBar)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack(spacing: 12) {
+                Button(String(localized: "取消")) {
+                    onCancel()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
+
+                Button(String(localized: "确认添加")) {
+                    onConfirm()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppTheme.primary)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
+            }
+            .padding(.top, 12)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
+            .background(Color(uiColor: .systemBackground))
+        }
+    }
+
+    private var imagePreviewCard: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(Color(uiColor: .secondarySystemBackground))
+            .frame(maxWidth: .infinity, minHeight: 320, maxHeight: 460)
+            .overlay {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: 420)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .padding(18)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
+            }
+            .padding(.horizontal, 20)
+    }
+
+    private var aiSummaryStatusText: String {
+        aiSummaryEnabled
+            ? String(localized: "AI 摘要：已开启")
+            : String(localized: "AI 摘要：未开启")
+    }
+
+    private var modelInfoText: String {
+        let model = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        if model.isEmpty {
+            return String(localized: "当前模型：\(config.provider.displayName)")
+        }
+        return String(localized: "当前模型：\(config.provider.displayName) · \(model)")
     }
 }
 

@@ -125,26 +125,26 @@ enum AIProviderService {
         }
 
         let decoded = try JSONDecoder().decode(AIOCRInsightResponse.self, from: jsonData)
-        let summary = decoded.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard summary.isEmpty == false else {
-            throw AIProviderServiceError.invalidResponse(provider)
-        }
-
-        let event = decoded.event
+        let event = decoded.events.first(where: { $0.needTodo == true }) ?? decoded.events.first
         let cleanedKeywords = Array(
             (event?.keywords ?? [])
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { $0.isEmpty == false }
                 .prefix(3)
         )
+        let cleanedDescription = cleanedOptional(event?.description)
+        let cleanedTitle = cleanedOptional(event?.title)
+        let cleanedDate = cleanedOptional(event?.date)
+        let cleanedTime = cleanedOptional(event?.time)
+        let summary = cleanedDescription ?? cleanedTitle ?? ""
 
         return AIOCRInsight(
             summary: summary,
-            date: cleanedOptional(event?.date),
-            time: cleanedOptional(event?.time),
-            title: cleanedOptional(event?.title),
+            date: cleanedDate,
+            time: cleanedTime,
+            title: cleanedTitle,
             keywords: cleanedKeywords,
-            description: cleanedOptional(event?.description),
+            description: cleanedDescription,
             needTodo: event?.needTodo ?? false
         )
     }
@@ -198,32 +198,34 @@ enum AIProviderService {
 
     private static func userPrompt(rawText: String) -> String {
         """
-        请从 OCR 文本中一次性提取摘要与结构化信息，只输出标准JSON，无多余文字。
+        从文本中提取未来时间相关事件，只输出标准JSON，无多余文字。
 
-        输出规则：
-        1. summary：1-2句中文摘要，客观，不编造事实。
-        2. event.date：YYYY-MM-DD；无明确日期填 null。
-        3. event.time：HH:MM；无明确时间填 null。
-        4. event.title：事件标题；无事件填 null。
-        5. event.keywords：关键词数组，0-3个。
-        6. event.description：详细内容；无事件填 null。
-        7. event.needTodo：布尔值。有明确未来日期才为 true，否则 false。
+        规则：
+        1. 时间判断以模型服务器当前真实时间为准，识别晚于当前时间的未来事件，忽略已过期时间。
+        2. date 格式：YYYY-MM-DD，无则为 null。
+        3. time 格式：HH:MM。若有日期但无具体时间，默认填 "00:00"。
+        4. title：简洁事件标题，**必须包含日期或时间信息**。
+        5. keywords：字符串数组，至少1个、最多3个关键词。
+        6. description：客观完整描述事件，不脑补、不编造。
+        7. needTodo：布尔值。
+           - 有明确未来日期 → true
+           - 无日期 / 日期已过 / 仅介绍 → false
 
         输出结构：
         {
-          "summary": "摘要",
-          "event": {
-            "date": null,
-            "time": null,
-            "title": null,
-            "keywords": ["关键词1","关键词2"],
-            "description": null,
-            "needTodo": false
-          }
+          "events": [
+            {
+              "date": "YYYY-MM-DD" | null,
+              "time": "HH:MM",
+              "title": "标题（含日期）",
+              "keywords": ["关键词1","关键词2"],
+              "description": "详情",
+              "needTodo": true | false
+            }
+          ]
         }
 
-        返回内容必须是合法 JSON，只能使用 JSON 支持的类型，不要输出 | null、注释、代码块标记或额外说明。
-        无事件时，event 字段仍保留，除 keywords 可为空数组外其余为 null，needTodo 为 false。
+        无事件返回 {"events":[]}
 
         文本内容：
         \(rawText)
@@ -250,8 +252,7 @@ enum AIProviderService {
 }
 
 private struct AIOCRInsightResponse: Decodable {
-    let summary: String
-    let event: AIOCREventPayload?
+    let events: [AIOCREventPayload]
 }
 
 private struct AIOCREventPayload: Decodable {

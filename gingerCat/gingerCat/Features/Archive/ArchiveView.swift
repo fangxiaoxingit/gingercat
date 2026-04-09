@@ -7,6 +7,7 @@ import ImageIO
 
 struct ArchiveView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
     @Query(sort: \ScanRecord.createdAt, order: .reverse) private var records: [ScanRecord]
 
     @AppStorage(KimiSettingsKeys.haptics) private var hapticsEnabled = true
@@ -43,11 +44,12 @@ struct ArchiveView: View {
                     ArchiveRowContent(record: record)
                         .background(
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(Color(uiColor: .secondarySystemBackground))
+                                .fill(rowCardBackgroundColor)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                                        .stroke(rowCardBorderColor, lineWidth: 1)
                                 )
+                                .shadow(color: rowCardShadowColor, radius: 8, x: 0, y: 4)
                         )
                         .padding(.horizontal, 16)
                         .padding(.vertical, 4)
@@ -105,6 +107,24 @@ struct ArchiveView: View {
             try? modelContext.save()
         }
     }
+
+    private var rowCardBackgroundColor: Color {
+        colorScheme == .dark
+            ? Color(uiColor: .secondarySystemBackground)
+            : .white
+    }
+
+    private var rowCardBorderColor: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.08)
+            : Color.black.opacity(0.05)
+    }
+
+    private var rowCardShadowColor: Color {
+        colorScheme == .dark
+            ? Color.black.opacity(0.16)
+            : Color.black.opacity(0.04)
+    }
 }
 
 private struct ArchiveRowContent: View {
@@ -125,36 +145,8 @@ private struct ArchiveRowContent: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            statusTag(
-                                record.needTodo ? String(localized: "待办") : String(localized: "非待办"),
-                                background: record.needTodo ? Color.red.opacity(0.14) : Color.gray.opacity(0.14),
-                                foreground: record.needTodo ? .red : .secondary
-                            )
-                            statusTag(
-                                record.resolvedIntent == .schedule ? String(localized: "日程") : String(localized: "总结"),
-                                background: AppTheme.primary.opacity(0.16),
-                                foreground: AppTheme.primary
-                            )
-                            statusTag(
-                                record.isOCRCompleted ? String(localized: "已 OCR") : String(localized: "待 OCR"),
-                                background: record.isOCRCompleted ? Color.green.opacity(0.16) : Color.orange.opacity(0.18),
-                                foreground: record.isOCRCompleted ? .green : .orange
-                            )
-                            statusTag(
-                                record.usedAISummary ? String(localized: "AI 摘要") : String(localized: "本地摘要"),
-                                background: record.usedAISummary ? Color.blue.opacity(0.16) : Color.gray.opacity(0.18),
-                                foreground: record.usedAISummary ? .blue : .secondary
-                            )
-                            if record.hasAddedTodoReminder {
-                                statusTag(
-                                    String(localized: "已加待办"),
-                                    background: Color.orange.opacity(0.16),
-                                    foreground: .orange
-                                )
-                            }
-                        }
+                    if record.eventKeywords.isEmpty == false {
+                        keywordTags
                     }
                 }
             }
@@ -176,13 +168,20 @@ private struct ArchiveRowContent: View {
         return summary.isEmpty ? String(localized: "正在识别内容...") : summary
     }
 
-    private func statusTag(_ text: String, background: Color, foreground: Color) -> some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(background, in: Capsule())
+    private var keywordTags: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(record.eventKeywords.prefix(6)), id: \.self) { keyword in
+                    Text(keyword)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppTheme.primary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(AppTheme.primary.opacity(0.12), in: Capsule())
+                }
+            }
+            .padding(.vertical, 2)
+        }
     }
 }
 

@@ -596,7 +596,8 @@ private struct AppearanceModeSelectionView: View {
                                             .foregroundStyle(AppTheme.primary)
                                     }
                                 }
-                                .padding(.vertical, 12)
+                                .frame(minHeight: 52)
+                                .padding(.vertical, 14)
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)

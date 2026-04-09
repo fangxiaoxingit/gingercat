@@ -22,6 +22,8 @@ struct ArchiveDetailView: View {
     @State private var isDeleteConfirmationPresented = false
     @State private var isRepeatTodoConfirmationPresented = false
     @State private var showRepeatTodoHintInEditor = false
+    @State private var toastMessage: String?
+    @State private var toastDismissTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -40,48 +42,48 @@ struct ArchiveDetailView: View {
                         .padding(.vertical, 20)
                 }
             }
+
+            toastLayer
         }
         .navigationTitle(String(localized: "记录详情"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    if record.isOCRCompleted == false {
-                        Button {
-                            Task {
-                                await runLocalOCR()
-                            }
-                        } label: {
-                            Label(
-                                isRunningLocalOCR ? String(localized: "本地OCR处理中...") : String(localized: "本地OCR"),
-                                systemImage: "text.viewfinder"
-                            )
-                        }
-                        .disabled(isRunningLocalOCR || isRunningAISummary)
-                    }
-
-                    if record.usedAISummary == false {
-                        Button {
-                            Task {
-                                await runAISummary()
-                            }
-                        } label: {
-                            Label(
-                                isRunningAISummary ? String(localized: "AI摘要处理中...") : String(localized: "AI 摘要"),
-                                systemImage: "sparkles"
-                            )
-                        }
-                        .disabled(isRunningLocalOCR || isRunningAISummary)
-                    }
-
                     Button {
                         presentReminderEditor()
                     } label: {
                         Label(
-                            record.hasAddedTodoReminder ? String(localized: "再次加入待办事项") : String(localized: "加入待办事项"),
+                            record.hasAddedTodoReminder ? String(localized: "再次加入待办提醒") : String(localized: "加入待办提醒"),
                             systemImage: "checklist"
                         )
                     }
+
+                    Button {
+                        showGenerationToast()
+                        Task {
+                            await runAISummary()
+                        }
+                    } label: {
+                        Label(
+                            isRunningAISummary ? String(localized: "AI摘要总结处理中...") : String(localized: "AI 摘要总结"),
+                            systemImage: "sparkles"
+                        )
+                    }
+                    .disabled(isRunningLocalOCR || isRunningAISummary)
+
+                    Button {
+                        showGenerationToast()
+                        Task {
+                            await runLocalOCR()
+                        }
+                    } label: {
+                        Label(
+                            isRunningLocalOCR ? String(localized: "文字提取处理中...") : String(localized: "本地提取文字"),
+                            systemImage: "text.viewfinder"
+                        )
+                    }
+                    .disabled(isRunningLocalOCR || isRunningAISummary)
 
                     Button(role: .destructive) {
                         isDeleteConfirmationPresented = true
@@ -149,6 +151,10 @@ struct ArchiveDetailView: View {
                 dismissButton: .default(Text(String(localized: "知道了")))
             )
         }
+        .onDisappear {
+            toastDismissTask?.cancel()
+            toastDismissTask = nil
+        }
     }
 
     private var detailSections: some View {
@@ -160,6 +166,26 @@ struct ArchiveDetailView: View {
             mergedRecordCard
             noteCard
         }
+    }
+
+    @ViewBuilder
+    private var toastLayer: some View {
+        VStack {
+            if let toastMessage {
+                Text(toastMessage)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.black.opacity(0.82), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            Spacer()
+        }
+        .animation(.easeInOut(duration: 0.22), value: toastMessage != nil)
     }
 
     private var imageHeroSection: some View {
@@ -225,15 +251,52 @@ struct ArchiveDetailView: View {
     private var mergedRecordCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
-                Label(String(localized: "记录信息"), systemImage: "text.quote")
-                    .font(.headline)
+                HStack(alignment: .center, spacing: 12) {
+                    Label(String(localized: "记录信息"), systemImage: "text.quote")
+                        .font(.headline)
+
+                    Spacer(minLength: 0)
+
+                    if canShowReminderAction {
+                        Button {
+                            presentReminderEditor()
+                        } label: {
+                            Text(reminderActionTitle)
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(AppTheme.primary)
+                    }
+                }
 
                 Divider()
 
-                LabeledContent(String(localized: "标题"), value: resolvedTitle)
-                LabeledContent(String(localized: "详细内容"), value: resolvedDetailText)
-                LabeledContent(String(localized: "关键词"), value: resolvedKeywords)
-                LabeledContent(String(localized: "日期时间"), value: AppDateTimeFormatter.string(from: record.eventDate ?? record.createdAt))
+                detailField(
+                    title: String(localized: "标题"),
+                    content: resolvedTitle
+                )
+
+                detailField(
+                    title: String(localized: "详细内容"),
+                    content: resolvedDetailText
+                )
+
+                detailField(
+                    title: String(localized: "关键词"),
+                    content: resolvedKeywords
+                )
+
+                detailField(
+                    title: String(localized: "日期时间"),
+                    content: AppDateTimeFormatter.string(from: record.eventDate ?? record.createdAt)
+                )
+
+                detailField(
+                    title: String(localized: "待办事项"),
+                    content: todoReminderStatusText
+                )
             }
         }
     }
@@ -312,6 +375,26 @@ struct ArchiveDetailView: View {
         #endif
     }
 
+    @MainActor
+    private func showGenerationToast() {
+        showToast(String(localized: "正在生成，请稍候查看结果。"), duration: 2_800_000_000)
+    }
+
+    @MainActor
+    private func showToast(_ message: String, duration: UInt64) {
+        toastDismissTask?.cancel()
+        toastMessage = message
+        toastDismissTask = Task {
+            try? await Task.sleep(nanoseconds: duration)
+            guard Task.isCancelled == false else { return }
+            await MainActor.run {
+                withAnimation {
+                    toastMessage = nil
+                }
+            }
+        }
+    }
+
     private func presentReminderEditor() {
         if record.hasAddedTodoReminder {
             isRepeatTodoConfirmationPresented = true
@@ -328,8 +411,8 @@ struct ArchiveDetailView: View {
         guard isRunningLocalOCR == false else { return }
         guard let image = resolvedImage else {
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "本地OCR失败"),
-                message: String(localized: "当前记录没有可用图片，无法执行本地OCR。")
+                title: String(localized: "文字提取失败"),
+                message: String(localized: "当前记录没有可用图片，无法执行文字提取。")
             )
             return
         }
@@ -341,17 +424,17 @@ struct ArchiveDetailView: View {
             let recognition = try await VisionOCRService.recognize(from: image)
             applyLocalOCRResult(recognition)
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "本地OCR完成"),
+                title: String(localized: "文字提取完成"),
                 message: String(localized: "已更新标题、详细内容、关键词和日期时间。")
             )
         } catch VisionOCRServiceError.noRecognizedText {
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "本地OCR失败"),
+                title: String(localized: "文字提取失败"),
                 message: String(localized: "未识别到可用文字，请更换更清晰的图片。")
             )
         } catch {
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "本地OCR失败"),
+                title: String(localized: "文字提取失败"),
                 message: error.localizedDescription
             )
         }
@@ -538,6 +621,39 @@ struct ArchiveDetailView: View {
     private var resolvedKeywords: String {
         let keywords = record.eventKeywords
         return keywords.isEmpty ? String(localized: "无") : keywords.joined(separator: " / ")
+    }
+
+    private var canShowReminderAction: Bool {
+        (record.eventDate ?? .distantPast) > .now
+    }
+
+    private var reminderActionTitle: String {
+        record.hasAddedTodoReminder
+            ? String(localized: "再次加入")
+            : String(localized: "加入待办")
+    }
+
+    private var todoReminderStatusText: String {
+        record.hasAddedTodoReminder
+            ? String(localized: "已添加")
+            : String(localized: "未添加")
+    }
+
+    private func detailField(title: String, content: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text(content)
+                .font(.body)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
     }
 
 }
@@ -727,7 +843,7 @@ private struct ReminderDraft {
         self.title = resolvedTitle
         self.notes = noteLines.joined(separator: "\n")
         self.dueDate = record.eventDate ?? Calendar.current.date(byAdding: .hour, value: 1, to: .now) ?? .now
-        self.hasDueDate = record.needTodo && record.eventDate != nil
+        self.hasDueDate = record.eventDate != nil
     }
 }
 
@@ -787,6 +903,8 @@ private struct ReminderDraftEditorView: View {
                             Text(String(localized: "确认添加"))
                         }
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(AppTheme.primary)
                     .disabled(isSaving || draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
