@@ -8,8 +8,10 @@ import ImageIO
 struct ArchiveDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     @AppStorage(AppSettingsKeys.haptics) private var hapticsEnabled = true
+    @AppStorage(AppSettingsKeys.hapticsIntensity) private var hapticsIntensityRaw = HapticFeedbackIntensity.medium.rawValue
 
     @Bindable var record: ScanRecord
     @State private var isImagePreviewPresented = false
@@ -24,6 +26,10 @@ struct ArchiveDetailView: View {
     @State private var showRepeatTodoHintInEditor = false
     @State private var toastMessage: String?
     @State private var toastDismissTask: Task<Void, Never>?
+
+    private var hapticsIntensity: HapticFeedbackIntensity {
+        HapticFeedbackIntensity(rawValue: hapticsIntensityRaw) ?? .medium
+    }
 
     var body: some View {
         ZStack {
@@ -222,12 +228,21 @@ struct ArchiveDetailView: View {
                     .fill(Color(uiColor: .tertiarySystemBackground))
                     .overlay {
                         VStack(spacing: 8) {
-                            Image(systemName: "photo")
-                                .font(.title2)
-                                .foregroundStyle(.secondary)
-                            Text(String(localized: "暂无图片"))
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                            if record.imageData == nil {
+                                Image(systemName: "append.page")
+                                    .font(.system(size: 44, weight: .medium))
+                                    .foregroundStyle(AppTheme.primary.opacity(colorScheme == .dark ? 0.92 : 0.78))
+                                Text(String(localized: "文字记录"))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Image(systemName: "photo")
+                                    .font(.title2)
+                                    .foregroundStyle(.secondary)
+                                Text(String(localized: "暂无图片"))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -368,11 +383,7 @@ struct ArchiveDetailView: View {
     }
 
     private func triggerHaptic() {
-        guard hapticsEnabled else { return }
-        #if canImport(UIKit)
-        let generator = UIImpactFeedbackGenerator(style: .soft)
-        generator.impactOccurred()
-        #endif
+        HapticFeedbackService.impact(enabled: hapticsEnabled, intensity: hapticsIntensity)
     }
 
     @MainActor
@@ -425,7 +436,7 @@ struct ArchiveDetailView: View {
             applyLocalOCRResult(recognition)
             reminderFeedback = ReminderFeedback(
                 title: String(localized: "文字提取完成"),
-                message: String(localized: "已更新标题、详细内容、关键词和日期时间。")
+                message: String(localized: "已更新识别文本，当前未生成本地摘要。")
             )
         } catch VisionOCRServiceError.noRecognizedText {
             reminderFeedback = ReminderFeedback(
@@ -469,7 +480,7 @@ struct ArchiveDetailView: View {
             )
             applyAIResult(
                 recognizedText: payload.rawText,
-                localFallbackSummary: payload.summary,
+                ocrFallbackText: payload.summary,
                 insight: insight,
                 lineBoxes: recognition.lineBoxes
             )
@@ -501,20 +512,18 @@ struct ArchiveDetailView: View {
             recognizedText: recognition.text,
             imageData: record.imageData
         )
-        let event = payload.events.first
-        let eventDate = event?.date
-        let needTodo = (eventDate ?? .distantPast) > .now
 
+        // 手动本地提取只更新 OCR 原文，避免重新生成本地摘要或本地事件结构。
         record.recognizedText = recognition.text
         record.ocrLineBoxes = recognition.lineBoxes
         record.summary = payload.summary
-        record.intent = (needTodo ? ScanIntent.schedule : ScanIntent.summary).rawValue
-        record.eventTitle = event?.title
-        record.eventDate = eventDate
-        record.eventTime = eventDate.map { pendingTimeFormatter.string(from: $0) }
+        record.intent = ScanIntent.summary.rawValue
+        record.eventTitle = nil
+        record.eventDate = nil
+        record.eventTime = nil
         record.eventKeywordsText = ""
-        record.eventDescription = payload.summary
-        record.needTodo = needTodo
+        record.eventDescription = payload.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : payload.rawText
+        record.needTodo = false
         record.isOCRCompleted = true
         record.usedAISummary = false
         try? modelContext.save()
@@ -522,12 +531,13 @@ struct ArchiveDetailView: View {
 
     private func applyAIResult(
         recognizedText: String,
-        localFallbackSummary: String,
+        ocrFallbackText: String,
         insight: AIOCRInsight,
         lineBoxes: [OCRLineBox]
     ) {
+        // AI 未返回摘要时回落到 OCR 原文，确保这里不会重新启用本地摘要。
         let resolvedSummary = insight.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? localFallbackSummary
+            ? ocrFallbackText
             : insight.summary.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedTitle = insight.title?.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedDescription = insight.description?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -590,13 +600,6 @@ struct ArchiveDetailView: View {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
-        return formatter
-    }
-
-    private var pendingTimeFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "HH:mm"
         return formatter
     }
 
@@ -834,7 +837,8 @@ private struct ReminderDraft {
         if let description = record.eventDescription?.trimmingCharacters(in: .whitespacesAndNewlines), description.isEmpty == false {
             noteLines.append(String(localized: "事件描述：\(description)"))
         } else {
-            noteLines.append(String(localized: "摘要：\(record.summary)"))
+            let label = record.usedAISummary ? String(localized: "摘要") : String(localized: "识别内容")
+            noteLines.append("\(label)：\(record.summary)")
         }
         if record.eventKeywords.isEmpty == false {
             noteLines.append(String(localized: "关键词：\(record.eventKeywords.joined(separator: "、"))"))

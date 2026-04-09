@@ -125,18 +125,20 @@ enum AIProviderService {
         }
 
         let decoded = try JSONDecoder().decode(AIOCRInsightResponse.self, from: jsonData)
-        let event = decoded.events.first(where: { $0.needTodo == true }) ?? decoded.events.first
+        let events = decoded.events ?? []
+        let event = events.first(where: { $0.needTodo == true }) ?? events.first
+        // 兼容“通用摘要 + 可选事件”的新结构，同时兼容旧的仅 events 返回格式。
         let cleanedKeywords = Array(
-            (event?.keywords ?? [])
+            (event?.keywords ?? decoded.keywords ?? [])
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { $0.isEmpty == false }
                 .prefix(3)
         )
-        let cleanedDescription = cleanedOptional(event?.description)
-        let cleanedTitle = cleanedOptional(event?.title)
+        let cleanedDescription = cleanedOptional(event?.description) ?? cleanedOptional(decoded.description)
+        let cleanedTitle = cleanedOptional(event?.title) ?? cleanedOptional(decoded.title)
         let cleanedDate = cleanedOptional(event?.date)
         let cleanedTime = cleanedOptional(event?.time)
-        let summary = cleanedDescription ?? cleanedTitle ?? ""
+        let summary = cleanedOptional(decoded.summary) ?? cleanedDescription ?? cleanedTitle ?? ""
 
         return AIOCRInsight(
             summary: summary,
@@ -198,21 +200,27 @@ enum AIProviderService {
 
     private static func userPrompt(rawText: String) -> String {
         """
-        从文本中提取未来时间相关事件，只输出标准JSON，无多余文字。
+        你需要先理解 OCR 文本，再输出摘要和事件信息。只输出标准 JSON，无多余文字。
 
         规则：
-        1. 时间判断以模型服务器当前真实时间为准，识别晚于当前时间的未来事件，忽略已过期时间。
-        2. date 格式：YYYY-MM-DD，无则为 null。
-        3. time 格式：HH:MM。若有日期但无具体时间，默认填 "00:00"。
-        4. title：简洁事件标题，**必须包含日期或时间信息**。
-        5. keywords：字符串数组，至少1个、最多3个关键词。
-        6. description：客观完整描述事件，不脑补、不编造。
-        7. needTodo：布尔值。
+        1. 无论文本是否包含未来事件，都必须生成 `summary`，用 50 字以内概括图片主要内容。
+        2. 若文本主要是商品、通知、聊天、说明、文章、海报等非日程内容，也要正常生成 `summary`。
+        3. title：提炼主标题，可为空；如果识别到未来事件，事件 title 必须包含日期或时间信息。
+        4. keywords：字符串数组，至少 1 个、最多 3 个关键词；没有合适关键词时返回空数组。
+        5. description：客观完整描述主要内容，不脑补、不编造，可比 summary 更详细。
+        6. 时间判断以模型服务器当前真实时间为准，识别晚于当前时间的未来事件，忽略已过期时间。
+        7. event.date 格式：YYYY-MM-DD，无则为 null。
+        8. event.time 格式：HH:MM。若有日期但无具体时间，默认填 "00:00"。
+        9. event.needTodo：布尔值。
            - 有明确未来日期 → true
            - 无日期 / 日期已过 / 仅介绍 → false
 
         输出结构：
         {
+          "summary": "50字以内摘要",
+          "title": "主标题或 null",
+          "keywords": ["关键词1","关键词2"],
+          "description": "对整张图主要内容的客观描述",
           "events": [
             {
               "date": "YYYY-MM-DD" | null,
@@ -225,7 +233,7 @@ enum AIProviderService {
           ]
         }
 
-        无事件返回 {"events":[]}
+        没有未来事件时，events 返回 []，但 summary / title / keywords / description 仍然要正常填写。
 
         文本内容：
         \(rawText)
@@ -252,7 +260,11 @@ enum AIProviderService {
 }
 
 private struct AIOCRInsightResponse: Decodable {
-    let events: [AIOCREventPayload]
+    let summary: String?
+    let title: String?
+    let keywords: [String]?
+    let description: String?
+    let events: [AIOCREventPayload]?
 }
 
 private struct AIOCREventPayload: Decodable {

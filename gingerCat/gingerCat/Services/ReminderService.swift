@@ -101,7 +101,9 @@ final class ReminderService {
            description.isEmpty == false {
             lines.append("事件描述：\(description)")
         } else {
-            lines.append("摘要：\(record.summary)")
+            // 未启用 AI 摘要时，这里保存的是 OCR 原文，因此文案需要与真实来源保持一致。
+            let label = record.usedAISummary ? "摘要" : "识别内容"
+            lines.append("\(label)：\(record.summary)")
         }
         if record.eventKeywords.isEmpty == false {
             lines.append("关键词：\(record.eventKeywords.joined(separator: "、"))")

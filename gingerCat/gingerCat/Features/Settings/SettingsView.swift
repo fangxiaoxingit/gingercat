@@ -3,12 +3,18 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage(AppSettingsKeys.aiSummaryEnabled) private var aiSummaryEnabled = false
     @AppStorage(AppSettingsKeys.haptics) private var hapticsEnabled = true
+    @AppStorage(AppSettingsKeys.hapticsIntensity) private var hapticsIntensityRaw = HapticFeedbackIntensity.medium.rawValue
     @AppStorage(AppSettingsKeys.appearanceMode) private var appearanceModeRaw = AppearanceMode.automatic.rawValue
     @AppStorage(AIProviderSettingsKeys.selectedProvider) private var selectedProviderRaw = AIProvider.kimi.rawValue
 
     private var appearanceMode: AppearanceMode {
         get { AppearanceMode(rawValue: appearanceModeRaw) ?? .automatic }
         set { appearanceModeRaw = newValue.rawValue }
+    }
+
+    private var hapticsIntensity: HapticFeedbackIntensity {
+        get { HapticFeedbackIntensity(rawValue: hapticsIntensityRaw) ?? .medium }
+        set { hapticsIntensityRaw = newValue.rawValue }
     }
 
     private var selectedProvider: AIProvider {
@@ -176,7 +182,7 @@ struct SettingsView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                         }
-                        .padding(.vertical, 12)
+                        .padding(.vertical, 20)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -199,7 +205,40 @@ struct SettingsView: View {
                         Toggle("", isOn: $hapticsEnabled)
                             .labelsHidden()
                     }
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 20)
+
+                    if hapticsEnabled {
+                        Divider()
+                            .padding(.leading, 36)
+
+                        NavigationLink {
+                            HapticIntensitySelectionView(selectedIntensity: $hapticsIntensityRaw)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "waveform.path")
+                                    .font(.body)
+                                    .foregroundStyle(AppTheme.primary)
+                                    .frame(width: 24)
+
+                                Text(String(localized: "震动力度"))
+                                    .font(.subheadline)
+                                    .foregroundStyle(.primary)
+
+                                Spacer(minLength: 0)
+
+                                Text(hapticsIntensity.displayName)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 20)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }
@@ -596,7 +635,7 @@ private struct AppearanceModeSelectionView: View {
                                             .foregroundStyle(AppTheme.primary)
                                     }
                                 }
-                                .frame(minHeight: 52)
+                                .frame(minHeight: 30)
                                 .padding(.vertical, 14)
                                 .contentShape(Rectangle())
                             }
@@ -615,6 +654,74 @@ private struct AppearanceModeSelectionView: View {
         }
         .navigationTitle(String(localized: "外观"))
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct HapticIntensitySelectionView: View {
+    @Binding var selectedIntensity: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack {
+            LiquidBackground()
+
+            ScrollView {
+                GlassCard(cornerRadius: 18) {
+                    VStack(spacing: 0) {
+                        ForEach(HapticFeedbackIntensity.allCases, id: \.self) { intensity in
+                            Button {
+                                selectedIntensity = intensity.rawValue
+                                dismiss()
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: intensityIconName(for: intensity))
+                                        .font(.body)
+                                        .foregroundStyle(AppTheme.primary)
+                                        .frame(width: 24)
+
+                                    Text(intensity.displayName)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.primary)
+
+                                    Spacer(minLength: 0)
+
+                                    if selectedIntensity == intensity.rawValue {
+                                        Image(systemName: "checkmark")
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(AppTheme.primary)
+                                    }
+                                }
+                                .frame(minHeight: 30)
+                                .padding(.vertical, 14)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+
+                            if intensity != HapticFeedbackIntensity.allCases.last {
+                                Divider()
+                                    .padding(.leading, 36)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 20)
+            }
+        }
+        .navigationTitle(String(localized: "震动力度"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    // 用不同波形图标帮助用户快速区分不同力度层级。
+    private func intensityIconName(for intensity: HapticFeedbackIntensity) -> String {
+        switch intensity {
+        case .weak:
+            return "waveform.path"
+        case .medium:
+            return "waveform.path.badge.plus"
+        case .strong:
+            return "waveform"
+        }
     }
 }
 

@@ -11,9 +11,14 @@ struct ArchiveView: View {
     @Query(sort: \ScanRecord.createdAt, order: .reverse) private var records: [ScanRecord]
 
     @AppStorage(KimiSettingsKeys.haptics) private var hapticsEnabled = true
+    @AppStorage(KimiSettingsKeys.hapticsIntensity) private var hapticsIntensityRaw = HapticFeedbackIntensity.medium.rawValue
 
     @State private var searchText = ""
     @State private var selectedRecord: ScanRecord?
+
+    private var hapticsIntensity: HapticFeedbackIntensity {
+        HapticFeedbackIntensity(rawValue: hapticsIntensityRaw) ?? .medium
+    }
 
     var body: some View {
         ZStack {
@@ -28,7 +33,7 @@ struct ArchiveView: View {
             }
         }
         .navigationTitle(String(localized: "历史记录"))
-        .searchable(text: $searchText, prompt: String(localized: "搜索摘要或备注"))
+        .searchable(text: $searchText, prompt: String(localized: "搜索识别内容、摘要或备注"))
         .navigationDestination(item: $selectedRecord) { record in
             ArchiveDetailView(record: record)
         }
@@ -72,11 +77,7 @@ struct ArchiveView: View {
     }
 
     private func triggerHaptic() {
-        guard hapticsEnabled else { return }
-        #if canImport(UIKit)
-        let generator = UIImpactFeedbackGenerator(style: .soft)
-        generator.impactOccurred()
-        #endif
+        HapticFeedbackService.impact(enabled: hapticsEnabled, intensity: hapticsIntensity)
     }
 
     private var emptyStateView: some View {
@@ -186,6 +187,7 @@ private struct ArchiveRowContent: View {
 }
 
 private struct RecordThumbnailView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
     let cacheKey: UUID
     let imageData: Data?
@@ -201,9 +203,7 @@ private struct RecordThumbnailView: View {
                         .resizable()
                         .scaledToFill()
                 } else {
-                    Image(systemName: "photo")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
+                    placeholderIcon
                 }
             }
             .frame(width: side, height: side)
@@ -214,7 +214,21 @@ private struct RecordThumbnailView: View {
             .onChange(of: cacheKey) { _, _ in
                 resolvedImage = nil
                 loadImageIfNeeded()
-            }
+        }
+    }
+
+    // 历史记录中的文字条目没有缩略图时，用文档图标与图片条目区分开。
+    @ViewBuilder
+    private var placeholderIcon: some View {
+        if imageData == nil {
+            Image(systemName: "append.page")
+                .font(.system(size: 34, weight: .medium))
+                .foregroundStyle(AppTheme.primary.opacity(colorScheme == .dark ? 0.92 : 0.78))
+        } else {
+            Image(systemName: "photo")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func loadImageIfNeeded() {

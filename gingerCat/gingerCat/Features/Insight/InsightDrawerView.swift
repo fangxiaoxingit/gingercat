@@ -58,14 +58,14 @@ struct InsightDrawerView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Label(
-                        payload.summarySource == .ai ? String(localized: "AI 摘要") : String(localized: "摘要"),
+                        payload.summarySource == .ai ? String(localized: "AI 摘要") : String(localized: "识别文本"),
                         systemImage: payload.summarySource == .ai ? "sparkles.rectangle.stack" : "text.quote"
                     )
                     .font(.headline)
 
                     Spacer(minLength: 0)
 
-                    Text(payload.summarySource == .ai ? String(localized: "Kimi") : String(localized: "本地"))
+                    Text(payload.summarySource == .ai ? String(localized: "Kimi") : String(localized: "OCR"))
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)

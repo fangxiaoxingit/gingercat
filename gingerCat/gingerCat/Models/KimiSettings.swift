@@ -3,6 +3,7 @@ import Foundation
 enum AppSettingsKeys {
     static let aiSummaryEnabled = "settings.aiSummaryEnabled"
     static let haptics = "settings.haptics"
+    static let hapticsIntensity = "settings.hapticsIntensity"
     static let appearanceMode = "settings.appearanceMode"
 }
 
@@ -211,7 +212,25 @@ enum KimiSettingsKeys {
     static let topP = AIProviderSettingsKeys.topP(for: .kimi)
     static let aiSummaryEnabled = AppSettingsKeys.aiSummaryEnabled
     static let haptics = AppSettingsKeys.haptics
+    static let hapticsIntensity = AppSettingsKeys.hapticsIntensity
     static let appearanceMode = AppSettingsKeys.appearanceMode
+}
+
+enum HapticFeedbackIntensity: String, CaseIterable {
+    case weak
+    case medium
+    case strong
+
+    var displayName: String {
+        switch self {
+        case .weak:
+            return String(localized: "弱")
+        case .medium:
+            return String(localized: "中")
+        case .strong:
+            return String(localized: "强")
+        }
+    }
 }
 
 enum AppearanceMode: String, CaseIterable {

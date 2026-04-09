@@ -18,7 +18,7 @@
 // 先走本地 OCR，确保无论 AI 开关状态都能获得基础文本。
 let recognition = try await VisionOCRService.recognize(from: image)
 
-// AI 开启时走一次性结构化提取，失败则回退到本地摘要，保证数据结构一致。
+// AI 开启时走一次性结构化提取，失败时仅保留 OCR 原文，避免本地摘要与 AI 结果混用。
 if aiSummaryEnabled, config.canRequestSummary {
     ...
 }
@@ -29,4 +29,3 @@ if aiSummaryEnabled, config.canRequestSummary {
 1. 检查本次改动是否都包含必要注释。
 2. 检查注释是否准确描述业务意图与边界。
 3. 确保注释与实际代码一致，避免过期注释。
-

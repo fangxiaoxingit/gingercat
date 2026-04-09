@@ -10,7 +10,7 @@ struct CameraCaptureView: UIViewControllerRepresentable {
     @Binding var capturedImage: UIImage?
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
+        let picker = LocalizedCameraPickerController()
         picker.delegate = context.coordinator
         picker.sourceType = .camera
         picker.cameraCaptureMode = .photo
@@ -23,6 +23,39 @@ struct CameraCaptureView: UIViewControllerRepresentable {
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
+    }
+
+    // UIImagePickerController 的系统按钮在部分环境下不会跟随中文，统一在布局后覆盖常见底部按钮标题。
+    final class LocalizedCameraPickerController: UIImagePickerController {
+        override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            localizeButtons(in: view)
+        }
+
+        private func localizeButtons(in view: UIView) {
+            for subview in view.subviews {
+                if let button = subview as? UIButton,
+                   let currentTitle = button.title(for: .normal)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   currentTitle.isEmpty == false {
+                    let localizedTitle = switch currentTitle {
+                    case "Cancel":
+                        String(localized: "取消")
+                    case "Retake":
+                        String(localized: "重拍")
+                    case "Use Photo":
+                        String(localized: "使用照片")
+                    default:
+                        currentTitle
+                    }
+
+                    if localizedTitle != currentTitle {
+                        button.setTitle(localizedTitle, for: .normal)
+                    }
+                }
+
+                localizeButtons(in: subview)
+            }
+        }
     }
 
     final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {

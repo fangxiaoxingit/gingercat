@@ -14,10 +14,14 @@ struct HomeScannerView: View {
 
     @AppStorage(AppSettingsKeys.aiSummaryEnabled) private var aiSummaryEnabled = false
     @AppStorage(AppSettingsKeys.haptics) private var hapticsEnabled = true
+    @AppStorage(AppSettingsKeys.hapticsIntensity) private var hapticsIntensityRaw = HapticFeedbackIntensity.medium.rawValue
+
+    private var hapticsIntensity: HapticFeedbackIntensity {
+        HapticFeedbackIntensity(rawValue: hapticsIntensityRaw) ?? .medium
+    }
 
     private func triggerHaptic() {
-        guard hapticsEnabled else { return }
-        playSoftHaptic()
+        HapticFeedbackService.impact(enabled: hapticsEnabled, intensity: hapticsIntensity)
     }
 
     @State private var selectedPhotoItem: PhotosPickerItem?
@@ -29,7 +33,9 @@ struct HomeScannerView: View {
     @State private var activeAlert: HomeAlert?
     @State private var toastMessage: String?
     @State private var toastDismissTask: Task<Void, Never>?
+    @State private var isAddMenuExpanded = false
     @State private var pendingAddConfirmation: PendingAddConfirmation?
+    @State private var pendingTextInput = ""
     @State private var isSettingsPresented = false
     @State private var isArchivePresented = false
     @State private var selectedPendingRecord: ScanRecord?
@@ -46,6 +52,15 @@ struct HomeScannerView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 20)
                         .padding(.bottom, 140)
+                }
+
+                if isAddMenuExpanded {
+                    Color.black.opacity(0.001)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            collapseAddMenu()
+                        }
                 }
 
                 floatingAddButtonLayer
@@ -82,23 +97,39 @@ struct HomeScannerView: View {
                 CameraCaptureView(capturedImage: $capturedCameraImage)
                     .ignoresSafeArea()
             }
-            .fullScreenCover(item: $pendingAddConfirmation) { pending in
-                PendingImageAddConfirmationView(
-                    image: pending.image,
+            .sheet(item: $pendingAddConfirmation) { pending in
+                PendingAddConfirmationSheet(
+                    pending: pending,
+                    text: $pendingTextInput,
                     aiSummaryEnabled: aiSummaryEnabled,
                     config: AIProviderConfigStore.selectedRuntimeConfig(),
                     onCancel: {
                         pendingAddConfirmation = nil
+                        pendingTextInput = ""
                     },
                     onConfirm: {
-                        let image = pending.image
                         let source = pending.source
-                        pendingAddConfirmation = nil
-                        Task {
-                            await enqueueImageForRecognition(image, source: source)
+                        switch pending.kind {
+                        case .image:
+                            guard let image = pending.image else {
+                                pendingAddConfirmation = nil
+                                return
+                            }
+                            pendingAddConfirmation = nil
+                            Task {
+                                await enqueueImageForRecognition(image, source: source)
+                            }
+                        case .text:
+                            let text = pendingTextInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                            pendingAddConfirmation = nil
+                            pendingTextInput = ""
+                            Task {
+                                await enqueueTextForRecognition(text, source: source)
+                            }
                         }
                     }
                 )
+                .presentationDetents([.medium, .large])
             }
             .onChange(of: selectedPhotoItem) { _, newItem in
                 guard let newItem else { return }
@@ -174,6 +205,7 @@ struct HomeScannerView: View {
                 Spacer(minLength: 0)
 
                 Button {
+                    triggerHaptic()
                     isArchivePresented = true
                 } label: {
                     Image(systemName: "clock")
@@ -210,7 +242,10 @@ struct HomeScannerView: View {
                     }
                     .homeRegularGlass(cornerRadius: 16, tint: cardGlassTint, enabled: colorScheme == .light)
                     .overlay {
-                        HomeRecordCollage(records: Array(records.prefix(3)))
+                        HomeRecordCollage(records: Array(records.prefix(3))) { record in
+                            triggerHaptic()
+                            selectedPendingRecord = record
+                        }
                             .padding(.horizontal, 14)
                             .padding(.vertical, 12)
                     }
@@ -315,7 +350,7 @@ struct HomeScannerView: View {
             Spacer(minLength: 0)
             HStack {
                 Spacer(minLength: 0)
-                quickAddButton
+                addMenuCluster
             }
         }
         .padding(.trailing, 24)
@@ -365,41 +400,68 @@ struct HomeScannerView: View {
         }
     }
 
+    private var addMenuCluster: some View {
+        ZStack(alignment: .bottomTrailing) {
+            if isAddMenuExpanded {
+                addMenuActionButtons
+            }
+
+            quickAddButton
+                .zIndex(1)
+        }
+    }
+
+    private var addMenuActionButtons: some View {
+        ForEach(QuickAddAction.allCases) { action in
+            AddMenuActionButton(
+                systemImage: action.systemImage,
+                tint: AppTheme.primary
+            ) {
+                handleQuickAddAction(action)
+            }
+            .offset(action.offset)
+            .transition(.scale(scale: 0.82).combined(with: .opacity))
+        }
+    }
+
     private var quickAddButton: some View {
-        Circle()
-            .fill(AppTheme.primary)
-            .frame(width: 66, height: 66)
-            .overlay {
-                Circle()
-                    .stroke(Color.white.opacity(0.22), lineWidth: 1)
-            }
-            .overlay {
-                Image(systemName: "plus")
-                    .font(.system(size: 27, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .homeRegularGlass(cornerRadius: 33, tint: AppTheme.primary.opacity(0.24))
-            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.22 : 0.16), radius: 8, x: 0, y: 4)
-            .scaleEffect(isQuickAddPressed ? 0.93 : 1.0)
-            .brightness(isQuickAddPressed ? -0.05 : 0)
-            .animation(.spring(response: 0.2, dampingFraction: 0.78), value: isQuickAddPressed)
-            .onTapGesture {
-                isPhotoPickerPresented = true
-            }
-            .onLongPressGesture(minimumDuration: 0.6) {
-                Task {
-                    await startCameraFlow()
+        Button {
+            toggleAddMenu()
+        } label: {
+            Circle()
+                .fill(AppTheme.primary)
+                .frame(width: 66, height: 66)
+                .overlay {
+                    Circle()
+                        .stroke(Color.white.opacity(0.22), lineWidth: 1)
                 }
-            }
+                .overlay {
+                    Image(systemName: "plus")
+                        .font(.system(size: 27, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .rotationEffect(.degrees(isAddMenuExpanded ? 45 : 0))
+                        .animation(.spring(response: 0.24, dampingFraction: 0.82), value: isAddMenuExpanded)
+                }
+        }
+        .buttonStyle(.plain)
+        .homeRegularGlass(cornerRadius: 33, tint: AppTheme.primary.opacity(0.24))
+        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.22 : 0.16), radius: 8, x: 0, y: 4)
+        .scaleEffect(isQuickAddPressed ? 0.93 : 1.0)
+        .brightness(isQuickAddPressed ? -0.05 : 0)
+        .animation(.spring(response: 0.2, dampingFraction: 0.78), value: isQuickAddPressed)
             .simultaneousGesture(
                 DragGesture(minimumDistance: 0)
                     .updating($isQuickAddPressed) { _, state, _ in
                         state = true
                     }
             )
-            .contentShape(Circle())
-            .accessibilityLabel(String(localized: "添加识别"))
-            .accessibilityHint(String(localized: "点击选图，长按拍照"))
+        .contentShape(Circle())
+        .accessibilityLabel(String(localized: "添加识别"))
+        .accessibilityHint(
+            isAddMenuExpanded
+                ? String(localized: "点击关闭添加菜单")
+                : String(localized: "点击展开文字、相册和拍照入口")
+        )
     }
 
     private var moduleBackgroundColor: Color {
@@ -487,7 +549,56 @@ struct HomeScannerView: View {
 
     @MainActor
     private func presentPendingAddConfirmation(for image: UIImage, source: String) {
-        pendingAddConfirmation = PendingAddConfirmation(image: image, source: source)
+        let title = source == "Camera"
+            ? String(localized: "确认添加拍照图片")
+            : String(localized: "确认添加相册图片")
+        pendingAddConfirmation = PendingAddConfirmation(
+            kind: .image,
+            image: image,
+            source: source,
+            title: title
+        )
+    }
+
+    // 文字入口不经过 OCR，直接把用户输入按现有数据结构落库，并在 AI 开启时补充摘要。
+    @MainActor
+    private func enqueueTextForRecognition(_ text: String, source: String) async {
+        let sanitizedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard sanitizedText.isEmpty == false else {
+            activeAlert = HomeAlert(message: String(localized: "请输入需要记录的文字内容。"))
+            return
+        }
+
+        let record = ScanRecord(
+            imageData: nil,
+            source: source,
+            recognizedText: "",
+            summary: String(localized: "正在处理文字..."),
+            intent: .summary,
+            note: "",
+            isOCRCompleted: false,
+            usedAISummary: false
+        )
+        modelContext.insert(record)
+        try? modelContext.save()
+
+        playSoftHaptic()
+        showEnqueueToast()
+        let recordID = record.id
+        let runtimeConfig = AIProviderConfigStore.selectedRuntimeConfig()
+        let useAI = aiSummaryEnabled
+
+        Task {
+            let result = await runTextRecognitionPipeline(
+                text: sanitizedText,
+                source: source,
+                aiSummaryEnabled: useAI,
+                config: runtimeConfig
+            )
+            await MainActor.run {
+                applyRecognitionResult(result, to: recordID)
+            }
+        }
     }
 
     @MainActor
@@ -527,6 +638,51 @@ struct HomeScannerView: View {
                 applyRecognitionResult(result, to: recordID)
             }
         }
+    }
+
+    // 文字录入与图片识别共用同一份 AI 结构化链路，确保首页三种入口的落库结构一致。
+    private func runTextRecognitionPipeline(
+        text: String,
+        source: String,
+        aiSummaryEnabled: Bool,
+        config: AIProviderRuntimeConfig
+    ) async -> OCRPipelineResult {
+        let payload = InsightPayloadBuilder.build(
+            source: source,
+            recognizedText: text,
+            imageData: nil
+        )
+
+        if aiSummaryEnabled, config.canRequestSummary {
+            do {
+                let aiInsight = try await AIProviderService.analyzeOCR(
+                    rawText: payload.rawText,
+                    config: config
+                )
+                return buildPipelineResultFromAI(
+                    recognizedText: payload.rawText,
+                    ocrFallbackText: payload.summary,
+                    insight: aiInsight,
+                    lineBoxes: []
+                )
+            } catch {
+                return buildPipelineResultFromOCR(
+                    payload,
+                    lineBoxes: [],
+                    aiFallbackMessage: String(
+                        localized: "AI 摘要请求失败，当前仅保留输入文字。\(error.localizedDescription)"
+                    )
+                )
+            }
+        } else if aiSummaryEnabled {
+            return buildPipelineResultFromOCR(
+                payload,
+                lineBoxes: [],
+                aiFallbackMessage: String(localized: "AI 摘要已开启，但 Kimi 配置不完整，当前仅保留输入文字。")
+            )
+        }
+
+        return buildPipelineResultFromOCR(payload, lineBoxes: [])
     }
 
     private func runRecognitionPipeline(
@@ -579,6 +735,7 @@ struct HomeScannerView: View {
                 imageData: imageData
             )
 
+            // 只有 AI 开启且配置完整时才做摘要与结构化提取，其他情况只保留 OCR 原文。
             if aiSummaryEnabled, config.canRequestSummary {
                 do {
                     let aiInsight = try await AIProviderService.analyzeOCR(
@@ -587,28 +744,28 @@ struct HomeScannerView: View {
                     )
                     return buildPipelineResultFromAI(
                         recognizedText: payload.rawText,
-                        localFallbackSummary: payload.summary,
+                        ocrFallbackText: payload.summary,
                         insight: aiInsight,
                         lineBoxes: recognition.lineBoxes
                     )
                 } catch {
-                    return buildPipelineResultFromLocal(
+                    return buildPipelineResultFromOCR(
                         payload,
                         lineBoxes: recognition.lineBoxes,
                         aiFallbackMessage: String(
-                            localized: "AI 总结请求失败，已回退到本地摘要。\(error.localizedDescription)"
+                            localized: "AI 摘要请求失败，当前仅保留 OCR 文本。\(error.localizedDescription)"
                         )
                     )
                 }
             } else if aiSummaryEnabled {
-                return buildPipelineResultFromLocal(
+                return buildPipelineResultFromOCR(
                     payload,
                     lineBoxes: recognition.lineBoxes,
-                    aiFallbackMessage: String(localized: "AI 总结已开启，但 Kimi 配置不完整，已回退到本地摘要。")
+                    aiFallbackMessage: String(localized: "AI 摘要已开启，但 Kimi 配置不完整，当前仅保留 OCR 文本。")
                 )
             }
 
-            return buildPipelineResultFromLocal(payload, lineBoxes: recognition.lineBoxes)
+            return buildPipelineResultFromOCR(payload, lineBoxes: recognition.lineBoxes)
         } catch VisionOCRServiceError.noRecognizedText {
             return OCRPipelineResult(
                 recognizedText: "",
@@ -750,29 +907,62 @@ struct HomeScannerView: View {
     }
 
     private func playSoftHaptic() {
-        #if canImport(UIKit)
-        guard hapticsEnabled else { return }
-        let generator = UIImpactFeedbackGenerator(style: .soft)
-        generator.impactOccurred()
-        #endif
+        HapticFeedbackService.impact(enabled: hapticsEnabled, intensity: hapticsIntensity)
     }
 
     private func playSuccessHaptic() {
-        #if canImport(UIKit)
-        guard hapticsEnabled else { return }
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-        #endif
+        HapticFeedbackService.success(enabled: hapticsEnabled)
+    }
+
+    @MainActor
+    private func toggleAddMenu() {
+        triggerHaptic()
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.82)) {
+            isAddMenuExpanded.toggle()
+        }
+    }
+
+    @MainActor
+    private func collapseAddMenu() {
+        guard isAddMenuExpanded else { return }
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.82)) {
+            isAddMenuExpanded = false
+        }
+    }
+
+    // 菜单点击后先收起圆环，再分发到具体入口，避免出现弹窗时菜单还停留在页面上。
+    @MainActor
+    private func handleQuickAddAction(_ action: QuickAddAction) {
+        collapseAddMenu()
+        triggerHaptic()
+
+        switch action {
+        case .text:
+            pendingTextInput = ""
+            pendingAddConfirmation = PendingAddConfirmation(
+                kind: .text,
+                image: nil,
+                source: "Text",
+                title: String(localized: "确认添加文字")
+            )
+        case .photo:
+            isPhotoPickerPresented = true
+        case .camera:
+            Task {
+                await startCameraFlow()
+            }
+        }
     }
 
     private func buildPipelineResultFromAI(
         recognizedText: String,
-        localFallbackSummary: String,
+        ocrFallbackText: String,
         insight: AIOCRInsight,
         lineBoxes: [OCRLineBox]
     ) -> OCRPipelineResult {
+        // AI 未返回摘要时，直接回落到 OCR 原文，避免恢复已删除的本地摘要逻辑。
         let resolvedSummary = insight.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? localFallbackSummary
+            ? ocrFallbackText
             : insight.summary.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedTitle = insight.title?.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedDescription = insight.description?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -806,26 +996,25 @@ struct HomeScannerView: View {
         )
     }
 
-    private func buildPipelineResultFromLocal(
+    private func buildPipelineResultFromOCR(
         _ payload: InsightPayload,
         lineBoxes: [OCRLineBox],
         aiFallbackMessage: String? = nil
     ) -> OCRPipelineResult {
-        let event = payload.events.first
-        let eventDate = event?.date
-        let needTodo = (eventDate ?? .distantPast) > .now
-        let time = eventDate.map { pendingTimeFormatter.string(from: $0) }
+        let resolvedText = payload.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let eventDescription = resolvedText.isEmpty ? nil : resolvedText
 
+        // 本地分支只同步 OCR 文本，事件结构化信息统一留给 AI 摘要阶段生成。
         return OCRPipelineResult(
-            recognizedText: payload.rawText,
-            summary: payload.summary,
-            intent: needTodo ? .schedule : .summary,
-            eventTitle: event?.title,
-            eventDate: eventDate,
-            eventTime: time,
+            recognizedText: resolvedText,
+            summary: resolvedText,
+            intent: .summary,
+            eventTitle: nil,
+            eventDate: nil,
+            eventTime: nil,
             eventKeywords: [],
-            eventDescription: payload.summary,
-            needTodo: needTodo,
+            eventDescription: eventDescription,
+            needTodo: false,
             isOCRCompleted: true,
             usedAISummary: false,
             lineBoxes: lineBoxes,
@@ -853,13 +1042,6 @@ struct HomeScannerView: View {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
-        return formatter
-    }
-
-    private var pendingTimeFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "HH:mm"
         return formatter
     }
 
@@ -895,9 +1077,16 @@ private struct PendingTodoItem: Identifiable {
 }
 
 private struct PendingAddConfirmation: Identifiable {
+    let kind: PendingAddConfirmationKind
     let id = UUID()
-    let image: UIImage
+    let image: UIImage?
     let source: String
+    let title: String
+}
+
+private enum PendingAddConfirmationKind: Equatable {
+    case image
+    case text
 }
 
 private struct HomeAlert: Identifiable {
@@ -931,7 +1120,7 @@ private enum OCRCompletionNotificationService {
 
             let content = UNMutableNotificationContent()
             content.title = String(localized: "识别完成")
-            content.body = "\(title) \(String(localized: "内容摘要已完成"))"
+            content.body = "\(title) \(String(localized: "识别结果已完成"))"
             content.sound = .default
             content.userInfo = ["recordID": recordID.uuidString]
 
@@ -947,12 +1136,16 @@ private enum OCRCompletionNotificationService {
     }
 }
 
-private struct PendingImageAddConfirmationView: View {
-    let image: UIImage
+private struct PendingAddConfirmationSheet: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let pending: PendingAddConfirmation
+    @Binding var text: String
     let aiSummaryEnabled: Bool
     let config: AIProviderRuntimeConfig
     let onCancel: () -> Void
     let onConfirm: () -> Void
+
+    @FocusState private var isTextEditorFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -962,7 +1155,7 @@ private struct PendingImageAddConfirmationView: View {
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 20) {
-                        imagePreviewCard
+                        contentCard
 
                         VStack(spacing: 6) {
                             Text(aiSummaryStatusText)
@@ -981,10 +1174,16 @@ private struct PendingImageAddConfirmationView: View {
                     .frame(maxWidth: .infinity)
                 }
             }
-            .navigationTitle(String(localized: "确认添加图片"))
+            .navigationTitle(pending.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarBackground(Color(uiColor: .systemBackground), for: .navigationBar)
+            .onAppear {
+                guard pending.kind == .text else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    isTextEditorFocused = true
+                }
+            }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack(spacing: 12) {
@@ -992,16 +1191,22 @@ private struct PendingImageAddConfirmationView: View {
                     onCancel()
                 }
                 .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
 
                 Button(String(localized: "确认添加")) {
                     onConfirm()
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(AppTheme.primary)
-                .controlSize(.large)
+                .buttonStyle(.plain)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.vertical, 14)
                 .frame(maxWidth: .infinity)
+                .background(AppTheme.primary, in: Capsule())
+                .controlSize(.large)
+                .disabled(confirmDisabled)
+                .opacity(confirmDisabled ? 0.5 : 1)
             }
             .padding(.top, 12)
             .padding(.horizontal, 20)
@@ -1010,17 +1215,48 @@ private struct PendingImageAddConfirmationView: View {
         }
     }
 
+    @ViewBuilder
+    private var contentCard: some View {
+        switch pending.kind {
+        case .image:
+            imagePreviewCard
+        case .text:
+            textInputCard
+        }
+    }
+
     private var imagePreviewCard: some View {
         RoundedRectangle(cornerRadius: 24, style: .continuous)
             .fill(Color(uiColor: .secondarySystemBackground))
             .frame(maxWidth: .infinity, minHeight: 320, maxHeight: 460)
             .overlay {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: 420)
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .padding(18)
+                if let image = pending.image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity, maxHeight: 420)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .padding(18)
+                }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
+            }
+            .padding(.horizontal, 20)
+    }
+
+    private var textInputCard: some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(Color(uiColor: .secondarySystemBackground))
+            .frame(maxWidth: .infinity, minHeight: 260)
+            .overlay(alignment: .topLeading) {
+                TextEditor(text: $text)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.clear)
+                    .foregroundStyle(colorScheme == .dark ? .white : .primary)
+                    .focused($isTextEditorFocused)
+                    .padding(16)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -1042,12 +1278,90 @@ private struct PendingImageAddConfirmationView: View {
         }
         return String(localized: "当前模型：\(config.provider.displayName) · \(model)")
     }
+
+    private var confirmDisabled: Bool {
+        pending.kind == .text && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+private enum QuickAddAction: CaseIterable, Identifiable {
+    case text
+    case photo
+    case camera
+
+    var id: Self { self }
+
+    var systemImage: String {
+        switch self {
+        case .text:
+            return "square.and.pencil"
+        case .photo:
+            return "photo.on.rectangle.angled"
+        case .camera:
+            return "camera"
+        }
+    }
+
+    // 通过固定角度把三个入口沿半圆展开，保持右下角按钮的空间关系稳定。
+    var offset: CGSize {
+        let radius: CGFloat = 96
+        let angle: Double
+
+        switch self {
+        case .text:
+            angle = 135
+        case .photo:
+            angle = 180
+        case .camera:
+            angle = 90
+        }
+
+        let radians = angle * .pi / 180
+        return CGSize(
+            width: cos(radians) * radius,
+            height: -sin(radians) * radius
+        )
+    }
+}
+
+private struct AddMenuActionButton: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let systemImage: String
+    let tint: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Circle()
+                .fill(buttonFillColor)
+                .frame(width: 54, height: 54)
+                .overlay {
+                    Circle()
+                        .stroke(buttonBorderColor, lineWidth: 1)
+                }
+                .overlay {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(tint)
+                }
+                .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var buttonFillColor: Color {
+        colorScheme == .dark ? Color(uiColor: .secondarySystemBackground) : .white
+    }
+
+    private var buttonBorderColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
+    }
 }
 
 private struct HomeRecordCollage: View {
     let records: [ScanRecord]
+    let onSelectRecord: (ScanRecord) -> Void
     @State private var animateCards = false
-    @State private var selectedRecord: ScanRecord?
 
     var body: some View {
         ZStack {
@@ -1063,9 +1377,6 @@ private struct HomeRecordCollage: View {
         .onChange(of: recordIDs) { _, _ in
             playEntryAnimation()
         }
-        .navigationDestination(item: $selectedRecord) { record in
-            ArchiveDetailView(record: record)
-        }
     }
 
     private func collageCard(for record: ScanRecord, at index: Int) -> some View {
@@ -1079,7 +1390,7 @@ private struct HomeRecordCollage: View {
         let targetOpacity = animateCards ? 1.0 : 0.0
 
         return Button {
-            selectedRecord = record
+            onSelectRecord(record)
         } label: {
             HomeCollageCard(
                 record: record,
@@ -1088,7 +1399,7 @@ private struct HomeRecordCollage: View {
                 isFront: isFront
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HomeCollageButtonStyle())
         .rotationEffect(.degrees(targetAngle))
         .offset(x: targetOffsetX, y: targetOffsetY)
         .scaleEffect(targetScale)
@@ -1143,9 +1454,7 @@ private struct HomeCollageCard: View {
                     .frame(width: 120, height: 120)
                     .clipped()
             } else {
-                Text(String(localized: "图片"))
-                    .font(.title2)
-                    .foregroundStyle(.primary.opacity(0.7))
+                placeholderContent
             }
         }
         .frame(width: 120, height: 120)
@@ -1153,7 +1462,7 @@ private struct HomeCollageCard: View {
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(
-                    isFront ? AppTheme.primary.opacity(colorScheme == .dark ? 0.70 : 0.45) : neutralBorderColor,
+                    isFront ? AppTheme.primary.opacity(colorScheme == .dark ? 0.82 : 0.58) : AppTheme.primary.opacity(colorScheme == .dark ? 0.48 : 0.32),
                     lineWidth: isFront ? 2.5 : 1
                 )
         }
@@ -1170,12 +1479,22 @@ private struct HomeCollageCard: View {
         #endif
     }
 
-    private var baseCardFill: Color {
-        colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.72)
+    // 纯文字记录没有图片资源时，用统一文档图标占位，避免误导成图片丢失。
+    @ViewBuilder
+    private var placeholderContent: some View {
+        if record.imageData == nil {
+            Image(systemName: "append.page")
+                .font(.system(size: 30, weight: .medium))
+                .foregroundStyle(AppTheme.primary.opacity(colorScheme == .dark ? 0.92 : 0.78))
+        } else {
+            Text(String(localized: "图片"))
+                .font(.title2)
+                .foregroundStyle(.primary.opacity(0.7))
+        }
     }
 
-    private var neutralBorderColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.34) : Color.black.opacity(0.18)
+    private var baseCardFill: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.72)
     }
 
     private var glassTint: Color {
@@ -1184,6 +1503,14 @@ private struct HomeCollageCard: View {
 
     private var shadowColor: Color {
         colorScheme == .dark ? Color.black.opacity(0.28) : AppTheme.primary.opacity(0.10)
+    }
+}
+
+private struct HomeCollageButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 1.04 : 1.0)
+            .animation(.spring(response: 0.18, dampingFraction: 0.82), value: configuration.isPressed)
     }
 }
 
