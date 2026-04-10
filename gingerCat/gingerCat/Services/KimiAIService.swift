@@ -62,7 +62,7 @@ enum AIProviderService {
         rawText: String,
         config: AIProviderRuntimeConfig
     ) async throws -> AIOCRInsight {
-        let content = try await withTimeout(seconds: 10, provider: config.provider) {
+        let content = try await withTimeout(seconds: 20, provider: config.provider) {
             try await requestCompletionContent(
                 messages: [
                     [
