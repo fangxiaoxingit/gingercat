@@ -304,8 +304,18 @@ struct ArchiveDetailView: View {
                 )
 
                 detailField(
-                    title: String(localized: "日期时间"),
-                    content: AppDateTimeFormatter.string(from: record.eventDate ?? record.createdAt)
+                    title: String(localized: "创建时间"),
+                    content: AppDateTimeFormatter.string(from: record.createdAt)
+                )
+
+                detailField(
+                    title: String(localized: "摘要更新时间"),
+                    content: summaryUpdatedTimeText
+                )
+
+                detailField(
+                    title: String(localized: "待办提醒时间"),
+                    content: reminderDueTimeText
                 )
 
                 detailField(
@@ -526,6 +536,8 @@ struct ArchiveDetailView: View {
         record.needTodo = false
         record.isOCRCompleted = true
         record.usedAISummary = false
+        record.summaryUpdatedAt = .now
+        record.summaryModelName = String(localized: "本地摘要")
         try? modelContext.save()
     }
 
@@ -565,6 +577,8 @@ struct ArchiveDetailView: View {
         record.needTodo = needTodo
         record.isOCRCompleted = true
         record.usedAISummary = true
+        record.summaryUpdatedAt = .now
+        record.summaryModelName = AIProviderConfigStore.selectedRuntimeConfig().summaryModelDisplayName
         try? modelContext.save()
     }
 
@@ -640,6 +654,25 @@ struct ArchiveDetailView: View {
         record.hasAddedTodoReminder
             ? String(localized: "已添加")
             : String(localized: "未添加")
+    }
+
+    private var summaryUpdatedTimeText: String {
+        guard let updatedAt = record.summaryUpdatedAt ?? (record.isOCRCompleted ? record.createdAt : nil) else {
+            return String(localized: "无")
+        }
+        let sourceName = (record.summaryModelName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let timestamp = AppDateTimeFormatter.string(from: updatedAt)
+        guard sourceName.isEmpty == false else {
+            return timestamp
+        }
+        return "\(sourceName) · \(timestamp)"
+    }
+
+    private var reminderDueTimeText: String {
+        guard let eventDate = record.eventDate else {
+            return String(localized: "无")
+        }
+        return AppDateTimeFormatter.string(from: eventDate)
     }
 
     private func detailField(title: String, content: String) -> some View {
@@ -883,9 +916,11 @@ private struct ReminderDraftEditorView: View {
                             selection: $draft.dueDate,
                             displayedComponents: [.date, .hourAndMinute]
                         )
+                        .environment(\.locale, Locale(identifier: "zh_CN"))
                     }
                 }
             }
+            .environment(\.locale, Locale(identifier: "zh_CN"))
             .navigationTitle(String(localized: "加入待办事项"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

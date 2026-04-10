@@ -2,7 +2,6 @@ import SwiftUI
 import SwiftData
 import PhotosUI
 import AVFoundation
-import UserNotifications
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -10,6 +9,8 @@ import UIKit
 struct HomeScannerView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var externalImportCenter: ExternalImportCenter
     @Query(sort: \ScanRecord.createdAt, order: .reverse) private var records: [ScanRecord]
 
     @AppStorage(AppSettingsKeys.aiSummaryEnabled) private var aiSummaryEnabled = false
@@ -38,11 +39,12 @@ struct HomeScannerView: View {
     @State private var pendingTextInput = ""
     @State private var isSettingsPresented = false
     @State private var isArchivePresented = false
-    @State private var selectedPendingRecord: ScanRecord?
+    @State private var selectedRecordRoute: RecordDetailRoute?
     @State private var revealedQuickAddActions: Set<QuickAddAction> = []
     @State private var quickAddAnimationTask: Task<Void, Never>?
     @ObservedObject private var recordNavigationCenter = RecordNavigationCenter.shared
     @GestureState private var isQuickAddPressed = false
+    @State private var pendingNotificationPresentationTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -86,8 +88,8 @@ struct HomeScannerView: View {
             .navigationDestination(isPresented: $isArchivePresented) {
                 ArchiveView()
             }
-            .navigationDestination(item: $selectedPendingRecord) { record in
-                ArchiveDetailView(record: record)
+            .navigationDestination(item: $selectedRecordRoute) { route in
+                RecordDetailDestinationView(recordID: route.recordID)
             }
             .photosPicker(
                 isPresented: $isPhotoPickerPresented,
@@ -146,12 +148,21 @@ struct HomeScannerView: View {
             }
             .onAppear {
                 openPendingNotificationRecordIfNeeded()
-            }
-            .onChange(of: records.map(\.id)) { _, _ in
-                openPendingNotificationRecordIfNeeded()
+                consumePendingExternalImportIfNeeded()
+                consumeLatestExternalImportErrorIfNeeded()
             }
             .onReceive(recordNavigationCenter.$pendingRecordID) { _ in
                 openPendingNotificationRecordIfNeeded()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                openPendingNotificationRecordIfNeeded()
+            }
+            .onChange(of: externalImportCenter.pendingImport?.id) { _, _ in
+                consumePendingExternalImportIfNeeded()
+            }
+            .onChange(of: externalImportCenter.latestErrorMessage) { _, _ in
+                consumeLatestExternalImportErrorIfNeeded()
             }
             .alert(item: $activeAlert) { alert in
                 Alert(
@@ -165,6 +176,8 @@ struct HomeScannerView: View {
                 quickAddAnimationTask = nil
                 toastDismissTask?.cancel()
                 toastDismissTask = nil
+                pendingNotificationPresentationTask?.cancel()
+                pendingNotificationPresentationTask = nil
             }
         }
     }
@@ -238,7 +251,7 @@ struct HomeScannerView: View {
                 homeSectionCard(height: 240) {
                     HomeRecordCollage(records: Array(records.prefix(3))) { record in
                         triggerHaptic()
-                        selectedPendingRecord = record
+                        presentRecordDetail(record.id, source: .manual)
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
@@ -275,7 +288,7 @@ struct HomeScannerView: View {
                         ForEach(Array(pendingTodos.enumerated()), id: \.element.id) { index, item in
                             Button {
                                 triggerHaptic()
-                                selectedPendingRecord = item.record
+                                presentRecordDetail(item.record.id, source: .manual)
                             } label: {
                                 pendingTodoRow(item)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -545,16 +558,100 @@ struct HomeScannerView: View {
     }
 
     @MainActor
-    private func presentPendingAddConfirmation(for image: UIImage, source: String) {
-        let title = source == "Camera"
-            ? String(localized: "确认添加拍照图片")
-            : String(localized: "确认添加相册图片")
+    private func presentPendingAddConfirmation(
+        for image: UIImage,
+        source: String,
+        titleOverride: String? = nil
+    ) {
+        let title: String
+        if let titleOverride {
+            title = titleOverride
+        } else if source == "Camera" {
+            title = String(localized: "确认添加拍照图片")
+        } else if source == "Share" {
+            title = String(localized: "确认添加共享图片")
+        } else {
+            title = String(localized: "确认添加相册图片")
+        }
+
         pendingAddConfirmation = PendingAddConfirmation(
             kind: .image,
             image: image,
             source: source,
             title: title
         )
+    }
+
+    // 外部导入先在首页统一转成现有确认或自动解析动作，保证分享扩展、捷径、相册三条路径产出的记录结构一致。
+    @MainActor
+    private func consumePendingExternalImportIfNeeded() {
+        guard let pendingImport = externalImportCenter.pendingImport else { return }
+        externalImportCenter.clearPendingImport()
+
+        // 外部入口已经完成 OCR 时，这里直接落库成已完成记录，避免再次弹确认或重复解析。
+        if let recognizedText = pendingImport.recognizedText {
+            insertPreParsedExternalRecord(
+                recognizedText: recognizedText,
+                imageData: pendingImport.imageData,
+                source: pendingImport.source
+            )
+            return
+        }
+
+        guard let imageData = pendingImport.imageData,
+              let image = UIImage(data: imageData) else {
+            activeAlert = HomeAlert(message: String(localized: "共享图片读取失败，请重新分享一次。"))
+            return
+        }
+
+        if pendingImport.autoProcess {
+            Task {
+                await enqueueImageForRecognition(image, source: pendingImport.source)
+            }
+            return
+        }
+
+        presentPendingAddConfirmation(
+            for: image,
+            source: pendingImport.source,
+            titleOverride: String(localized: "确认添加共享图片")
+        )
+    }
+
+    @MainActor
+    private func insertPreParsedExternalRecord(
+        recognizedText: String,
+        imageData: Data?,
+        source: String
+    ) {
+        let cleanedText = recognizedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleanedText.isEmpty == false else {
+            activeAlert = HomeAlert(message: String(localized: "共享图片没有识别到可用文字。"))
+            return
+        }
+
+        let record = ScanRecord(
+            summaryUpdatedAt: .now,
+            summaryModelName: String(localized: "本地摘要"),
+            imageData: imageData,
+            source: source,
+            recognizedText: cleanedText,
+            summary: cleanedText,
+            intent: .summary,
+            note: "",
+            isOCRCompleted: true,
+            usedAISummary: false
+        )
+        modelContext.insert(record)
+        try? modelContext.save()
+        showToast(String(localized: "图片已自动解析并加入记录。"), duration: 2_600_000_000)
+    }
+
+    @MainActor
+    private func consumeLatestExternalImportErrorIfNeeded() {
+        guard let latestErrorMessage = externalImportCenter.latestErrorMessage else { return }
+        externalImportCenter.clearLatestErrorMessage()
+        activeAlert = HomeAlert(message: latestErrorMessage)
     }
 
     // 文字入口不经过 OCR，直接把用户输入按现有数据结构落库，并在 AI 开启时补充摘要。
@@ -660,7 +757,8 @@ struct HomeScannerView: View {
                     recognizedText: payload.rawText,
                     ocrFallbackText: payload.summary,
                     insight: aiInsight,
-                    lineBoxes: []
+                    lineBoxes: [],
+                    summaryModelName: config.summaryModelDisplayName
                 )
             } catch {
                 return buildPipelineResultFromOCR(
@@ -668,7 +766,8 @@ struct HomeScannerView: View {
                     lineBoxes: [],
                     aiFallbackMessage: String(
                         localized: "AI 摘要请求失败，当前仅保留输入文字。\(error.localizedDescription)"
-                    )
+                    ),
+                    didAISummaryRequestFail: true
                 )
             }
         } else if aiSummaryEnabled {
@@ -703,7 +802,9 @@ struct HomeScannerView: View {
                 isOCRCompleted: false,
                 usedAISummary: false,
                 lineBoxes: [],
-                aiFallbackMessage: nil
+                aiFallbackMessage: nil,
+                didAISummaryRequestFail: false,
+                summaryModelName: nil
             )
         }
         #else
@@ -720,7 +821,9 @@ struct HomeScannerView: View {
             isOCRCompleted: false,
             usedAISummary: false,
             lineBoxes: [],
-            aiFallbackMessage: nil
+            aiFallbackMessage: nil,
+            didAISummaryRequestFail: false,
+            summaryModelName: nil
         )
         #endif
 
@@ -743,7 +846,8 @@ struct HomeScannerView: View {
                         recognizedText: payload.rawText,
                         ocrFallbackText: payload.summary,
                         insight: aiInsight,
-                        lineBoxes: recognition.lineBoxes
+                        lineBoxes: recognition.lineBoxes,
+                        summaryModelName: config.summaryModelDisplayName
                     )
                 } catch {
                     return buildPipelineResultFromOCR(
@@ -751,7 +855,8 @@ struct HomeScannerView: View {
                         lineBoxes: recognition.lineBoxes,
                         aiFallbackMessage: String(
                             localized: "AI 摘要请求失败，当前仅保留 OCR 文本。\(error.localizedDescription)"
-                        )
+                        ),
+                        didAISummaryRequestFail: true
                     )
                 }
             } else if aiSummaryEnabled {
@@ -777,7 +882,9 @@ struct HomeScannerView: View {
                 isOCRCompleted: false,
                 usedAISummary: false,
                 lineBoxes: [],
-                aiFallbackMessage: nil
+                aiFallbackMessage: nil,
+                didAISummaryRequestFail: false,
+                summaryModelName: nil
             )
         } catch VisionOCRServiceError.invalidImage {
             return OCRPipelineResult(
@@ -793,7 +900,9 @@ struct HomeScannerView: View {
                 isOCRCompleted: false,
                 usedAISummary: false,
                 lineBoxes: [],
-                aiFallbackMessage: nil
+                aiFallbackMessage: nil,
+                didAISummaryRequestFail: false,
+                summaryModelName: nil
             )
         } catch {
             return OCRPipelineResult(
@@ -809,7 +918,9 @@ struct HomeScannerView: View {
                 isOCRCompleted: false,
                 usedAISummary: false,
                 lineBoxes: [],
-                aiFallbackMessage: nil
+                aiFallbackMessage: nil,
+                didAISummaryRequestFail: false,
+                summaryModelName: nil
             )
         }
     }
@@ -829,6 +940,10 @@ struct HomeScannerView: View {
         record.needTodo = result.needTodo
         record.isOCRCompleted = result.isOCRCompleted
         record.usedAISummary = result.usedAISummary
+        record.summaryUpdatedAt = result.isOCRCompleted ? .now : record.summaryUpdatedAt
+        record.summaryModelName = result.isOCRCompleted
+            ? (result.usedAISummary ? result.summaryModelName : String(localized: "本地摘要"))
+            : record.summaryModelName
         record.ocrLineBoxes = result.lineBoxes
         try? modelContext.save()
 
@@ -838,12 +953,12 @@ struct HomeScannerView: View {
 
         if result.isOCRCompleted {
             playSuccessHaptic()
-            let completionTitle = completionNotificationTitle(for: record)
             Task {
-                await OCRCompletionNotificationService.notify(
-                    recordID: record.id,
-                    title: completionTitle
-                )
+                if result.didAISummaryRequestFail {
+                    await OCRCompletionNotifier.notifyAISummaryFailure(record: record)
+                } else {
+                    await OCRCompletionNotifier.notify(record: record)
+                }
             }
         } else {
             activeAlert = HomeAlert(message: result.summary)
@@ -852,22 +967,39 @@ struct HomeScannerView: View {
 
     @MainActor
     private func openPendingNotificationRecordIfNeeded() {
-        guard let recordID = recordNavigationCenter.pendingRecordID else { return }
-        guard let record = records.first(where: { $0.id == recordID }) else { return }
-        selectedPendingRecord = record
-        recordNavigationCenter.consumePendingRecordID()
+        guard scenePhase == .active else { return }
+        guard let recordID = recordNavigationCenter.pendingRecordIDFromMemoryOrStore() else { return }
+        presentRecordDetail(recordID, source: .notification)
     }
 
-    private func completionNotificationTitle(for record: ScanRecord) -> String {
-        if let title = record.eventTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
-           title.isEmpty == false {
-            return title
+    @MainActor
+    private func presentRecordDetail(_ recordID: UUID, source: RecordDetailOpenSource) {
+        pendingNotificationPresentationTask?.cancel()
+        pendingNotificationPresentationTask = nil
+
+        switch source {
+        case .manual:
+            recordNavigationCenter.consumePendingRecordID()
+            selectedRecordRoute = RecordDetailRoute(recordID: recordID)
+        case .notification:
+            pendingNotificationPresentationTask = Task { @MainActor in
+                defer {
+                    pendingNotificationPresentationTask = nil
+                }
+
+                try? await Task.sleep(for: .milliseconds(120))
+                guard Task.isCancelled == false else { return }
+                guard selectedRecordRoute == nil else { return }
+
+                selectedRecordRoute = RecordDetailRoute(recordID: recordID)
+                recordNavigationCenter.consumePendingRecordID()
+            }
         }
-        let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        if summary.isEmpty {
-            return String(localized: "识别记录")
-        }
-        return String(summary.prefix(18))
+    }
+
+    private enum RecordDetailOpenSource {
+        case manual
+        case notification
     }
 
     @MainActor
@@ -965,7 +1097,8 @@ struct HomeScannerView: View {
         quickAddAnimationTask = Task { @MainActor in
             for action in QuickAddAction.allCases.sorted(by: { $0.animationIndex < $1.animationIndex }) {
                 withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                    revealedQuickAddActions.insert(action)
+                    // 显式丢弃 Set 返回值，避免 withAnimation 被推断为非 Void 返回导致编译告警。
+                    _ = revealedQuickAddActions.insert(action)
                 }
                 try? await Task.sleep(for: .milliseconds(55))
             }
@@ -978,7 +1111,8 @@ struct HomeScannerView: View {
 
         for action in QuickAddAction.allCases.sorted(by: { $0.animationIndex > $1.animationIndex }) {
             withAnimation(.spring(response: 0.22, dampingFraction: 0.88)) {
-                revealedQuickAddActions.remove(action)
+                // remove 返回被移除元素，动画闭包这里不需要该值，显式丢弃以消除告警。
+                _ = revealedQuickAddActions.remove(action)
             }
             try? await Task.sleep(for: .milliseconds(40))
         }
@@ -990,7 +1124,8 @@ struct HomeScannerView: View {
         recognizedText: String,
         ocrFallbackText: String,
         insight: AIOCRInsight,
-        lineBoxes: [OCRLineBox]
+        lineBoxes: [OCRLineBox],
+        summaryModelName: String
     ) -> OCRPipelineResult {
         // AI 未返回摘要时，直接回落到 OCR 原文，避免恢复已删除的本地摘要逻辑。
         let resolvedSummary = insight.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1024,14 +1159,18 @@ struct HomeScannerView: View {
             isOCRCompleted: true,
             usedAISummary: true,
             lineBoxes: lineBoxes,
-            aiFallbackMessage: nil
+            aiFallbackMessage: nil,
+            didAISummaryRequestFail: false,
+            summaryModelName: summaryModelName
         )
     }
 
     private func buildPipelineResultFromOCR(
         _ payload: InsightPayload,
         lineBoxes: [OCRLineBox],
-        aiFallbackMessage: String? = nil
+        aiFallbackMessage: String? = nil,
+        didAISummaryRequestFail: Bool = false,
+        summaryModelName: String? = nil
     ) -> OCRPipelineResult {
         let resolvedText = payload.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         let eventDescription = resolvedText.isEmpty ? nil : resolvedText
@@ -1050,7 +1189,9 @@ struct HomeScannerView: View {
             isOCRCompleted: true,
             usedAISummary: false,
             lineBoxes: lineBoxes,
-            aiFallbackMessage: aiFallbackMessage
+            aiFallbackMessage: aiFallbackMessage,
+            didAISummaryRequestFail: didAISummaryRequestFail,
+            summaryModelName: summaryModelName
         )
     }
 
@@ -1140,32 +1281,8 @@ private struct OCRPipelineResult {
     let usedAISummary: Bool
     let lineBoxes: [OCRLineBox]
     let aiFallbackMessage: String?
-}
-
-private enum OCRCompletionNotificationService {
-    static func notify(recordID: UUID, title: String) async {
-        let center = UNUserNotificationCenter.current()
-
-        do {
-            let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
-            guard granted else { return }
-
-            let content = UNMutableNotificationContent()
-            content.title = String(localized: "识别完成")
-            content.body = "\(title) \(String(localized: "识别结果已完成"))"
-            content.sound = .default
-            content.userInfo = ["recordID": recordID.uuidString]
-
-            let request = UNNotificationRequest(
-                identifier: "ocr.summary.\(recordID.uuidString)",
-                content: content,
-                trigger: nil
-            )
-            try await center.add(request)
-        } catch {
-            // Silent fail: local notification should not interrupt main OCR flow.
-        }
-    }
+    let didAISummaryRequestFail: Bool
+    let summaryModelName: String?
 }
 
 private struct PendingAddConfirmationSheet: View {
@@ -1575,6 +1692,74 @@ private struct HomeCollageButtonStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 1.04 : 1.0)
             .animation(.spring(response: 0.18, dampingFraction: 0.82), value: configuration.isPressed)
+    }
+}
+
+private struct RecordDetailRoute: Hashable, Identifiable {
+    let recordID: UUID
+
+    var id: UUID { recordID }
+}
+
+private struct RecordDetailDestinationView: View {
+    @Environment(\.modelContext) private var modelContext
+
+    let recordID: UUID
+
+    @State private var record: ScanRecord?
+    @State private var loadTask: Task<Void, Never>?
+
+    var body: some View {
+        Group {
+            if let record {
+                ArchiveDetailView(record: record)
+            } else {
+                ContentUnavailableView(
+                    String(localized: "正在打开记录"),
+                    systemImage: "doc.text.magnifyingglass",
+                    description: Text(String(localized: "正在定位这条识别记录，请稍候。"))
+                )
+            }
+        }
+        .task(id: recordID) {
+            await loadRecord()
+        }
+        .onDisappear {
+            loadTask?.cancel()
+            loadTask = nil
+        }
+    }
+
+    @MainActor
+    private func loadRecord() async {
+        loadTask?.cancel()
+        record = nil
+
+        loadTask = Task { @MainActor in
+            for _ in 0..<15 {
+                guard Task.isCancelled == false else { return }
+
+                if let fetchedRecord = fetchRecord() {
+                    record = fetchedRecord
+                    return
+                }
+
+                try? await Task.sleep(for: .milliseconds(160))
+            }
+        }
+
+        await loadTask?.value
+    }
+
+    @MainActor
+    private func fetchRecord() -> ScanRecord? {
+        var descriptor = FetchDescriptor<ScanRecord>(
+            predicate: #Predicate { record in
+                record.id == recordID
+            }
+        )
+        descriptor.fetchLimit = 1
+        return try? modelContext.fetch(descriptor).first
     }
 }
 

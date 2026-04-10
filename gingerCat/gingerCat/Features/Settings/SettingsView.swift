@@ -248,6 +248,7 @@ struct SettingsView: View {
 private struct AIProviderConfigView: View {
     let provider: AIProvider
     @Binding var selectedProviderRaw: String
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var baseURL = ""
     @State private var modelID = ""
@@ -257,6 +258,8 @@ private struct AIProviderConfigView: View {
     @State private var topP = ""
     @State private var isTestingConfig = false
     @State private var testResult: AIProviderConfigTestResult?
+    @State private var requestLogs: [AIProviderRequestLogEntry] = []
+    @State private var selectedRequestLog: AIProviderRequestLogEntry?
 
     var body: some View {
         ZStack {
@@ -285,94 +288,107 @@ private struct AIProviderConfigView: View {
                 dismissButton: .default(Text(String(localized: "知道了")))
             )
         }
+        .sheet(item: $selectedRequestLog) { record in
+            AIProviderRequestLogDetailView(record: record)
+                .presentationDetents([.large])
+        }
         .task {
             loadStoredConfig()
+            loadRequestLogs()
         }
         .onDisappear {
             persistCurrentConfig()
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            loadRequestLogs()
+        }
     }
 
     private var configSections: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 12) {
-                providerHeader
+        VStack(alignment: .leading, spacing: 14) {
+            GlassCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    providerHeader
 
-                settingTextField(
-                    title: String(localized: "Base URL"),
-                    placeholder: provider.defaultBaseURL,
-                    text: binding(for: .baseURL)
-                )
-                .textInputAutocapitalization(.never)
-                .keyboardType(.URL)
-
-                modelFieldSection
-
-                SecureField(String(localized: "API Key（由用户自行填写）"), text: binding(for: .apiKey))
+                    settingTextField(
+                        title: String(localized: "Base URL"),
+                        placeholder: provider.defaultBaseURL,
+                        text: binding(for: .baseURL)
+                    )
                     .textInputAutocapitalization(.never)
-                    .padding(10)
-                    .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .keyboardType(.URL)
 
-                Divider()
+                    modelFieldSection
 
-                Text(String(localized: "模型参数（可选）"))
-                    .font(.subheadline.weight(.semibold))
+                    SecureField(String(localized: "API Key（由用户自行填写）"), text: binding(for: .apiKey))
+                        .textInputAutocapitalization(.never)
+                        .padding(10)
+                        .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-                settingTextField(
-                    title: String(localized: "max_tokens"),
-                    placeholder: String(localized: "留空使用服务端默认"),
-                    text: binding(for: .maxTokens)
-                )
-                .keyboardType(.numberPad)
+                    Divider()
 
-                settingTextField(
-                    title: String(localized: "temperature"),
-                    placeholder: provider.allowsTemperature(for: modelID) ? String(localized: "留空使用服务端默认") : String(localized: "当前模型通常忽略该参数"),
-                    text: binding(for: .temperature)
-                )
-                .keyboardType(.decimalPad)
+                    Text(String(localized: "模型参数（可选）"))
+                        .font(.subheadline.weight(.semibold))
 
-                settingTextField(
-                    title: String(localized: "top_p"),
-                    placeholder: provider.allowsTopP(for: modelID) ? String(localized: "留空使用服务端默认") : String(localized: "当前模型通常忽略该参数"),
-                    text: binding(for: .topP)
-                )
-                .keyboardType(.decimalPad)
+                    settingTextField(
+                        title: String(localized: "max_tokens"),
+                        placeholder: String(localized: "留空使用服务端默认"),
+                        text: binding(for: .maxTokens)
+                    )
+                    .keyboardType(.numberPad)
 
-                Divider()
+                    settingTextField(
+                        title: String(localized: "temperature"),
+                        placeholder: provider.allowsTemperature(for: modelID) ? String(localized: "留空使用服务端默认") : String(localized: "当前模型通常忽略该参数"),
+                        text: binding(for: .temperature)
+                    )
+                    .keyboardType(.decimalPad)
 
-                Button {
-                    selectedProviderRaw = provider.rawValue
-                    Task {
-                        await testCurrentConfig()
-                    }
-                } label: {
-                    HStack(spacing: 10) {
-                        if isTestingConfig {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Image(systemName: "network")
-                                .font(.body.weight(.semibold))
+                    settingTextField(
+                        title: String(localized: "top_p"),
+                        placeholder: provider.allowsTopP(for: modelID) ? String(localized: "留空使用服务端默认") : String(localized: "当前模型通常忽略该参数"),
+                        text: binding(for: .topP)
+                    )
+                    .keyboardType(.decimalPad)
+
+                    Divider()
+
+                    Button {
+                        selectedProviderRaw = provider.rawValue
+                        Task {
+                            await testCurrentConfig()
                         }
+                    } label: {
+                        HStack(spacing: 10) {
+                            if isTestingConfig {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "network")
+                                    .font(.body.weight(.semibold))
+                            }
 
-                        Text(isTestingConfig ? String(localized: "测试中...") : String(localized: "测试配置"))
-                            .font(.subheadline.weight(.semibold))
+                            Text(isTestingConfig ? String(localized: "测试中...") : String(localized: "测试配置"))
+                                .font(.subheadline.weight(.semibold))
 
-                        Spacer(minLength: 0)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .foregroundStyle(.white)
+                        .background(AppTheme.primary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
-                    .foregroundStyle(.white)
-                    .background(AppTheme.primary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .disabled(isTestingConfig)
+                    .buttonStyle(.plain)
+                    .disabled(isTestingConfig)
 
-                Text(String(localized: "点击后会发送一条测试提示词，验证当前模型和参数是否可用。"))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    Text(String(localized: "点击后会发送一条测试提示词，验证当前模型和参数是否可用。"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
+
+            requestLogsSection
         }
     }
 
@@ -400,6 +416,8 @@ private struct AIProviderConfigView: View {
 
     private var providerGuidanceText: String? {
         switch provider {
+        case .doubao:
+            return String(localized: "官方 OpenAI 兼容接入地址为 https://ark.cn-beijing.volces.com/api/v3，当前先支持 doubao-seed-2-0-lite-260215、doubao-seed-2-0-mini-260215、doubao-seed-2-0-pro-260215。")
         case .deepSeek:
             return String(localized: "推荐模型：deepseek-chat、deepseek-reasoner。若使用 deepseek-reasoner，temperature 与 top_p 往往会被忽略。")
         case .miniMax:
@@ -460,7 +478,10 @@ private struct AIProviderConfigView: View {
         }
 
         isTestingConfig = true
-        defer { isTestingConfig = false }
+        defer {
+            isTestingConfig = false
+            loadRequestLogs()
+        }
 
         do {
             let reply = try await AIProviderService.sendTestPrompt(
@@ -486,6 +507,10 @@ private struct AIProviderConfigView: View {
         maxTokens = config.maxTokens.map { String($0) } ?? ""
         temperature = config.temperature.map { String($0) } ?? ""
         topP = config.topP.map { String($0) } ?? ""
+    }
+
+    private func loadRequestLogs() {
+        requestLogs = AIProviderRequestLogStore.logs(for: provider)
     }
 
     private func persistCurrentConfig() {
@@ -553,6 +578,68 @@ private struct AIProviderConfigView: View {
         }
     }
 
+    private var requestLogsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(String(localized: "请求记录"))
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            GlassCard(cornerRadius: 18) {
+                if requestLogs.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(String(localized: "还没有请求记录"))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+
+                        Text(String(localized: "点击上方“测试配置”，或在首页触发 AI 摘要后，这里会展示每次请求的时间、结果和调试详情。"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(requestLogs.indices, id: \.self) { index in
+                            let record = requestLogs[index]
+                            Button {
+                                selectedRequestLog = record
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: record.isSuccess ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(record.isSuccess ? .green : .red)
+                                        .frame(width: 24)
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(requestLogTimestamp(for: record.createdAt))
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(.primary)
+
+                                        Text("\(record.operation.displayName) · \(record.model)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    Spacer(minLength: 0)
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.vertical, 12)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+
+                            if index < requestLogs.count - 1 {
+                                Divider()
+                                    .padding(.leading, 36)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private func presentTestFailure(_ message: String, config: AIProviderRuntimeConfig) {
         let resolvedBaseURL = config.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedModel = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -566,6 +653,10 @@ private struct AIProviderConfigView: View {
             Model：\(resolvedModel.isEmpty ? String(localized: "未填写") : resolvedModel)
             """
         )
+    }
+
+    private func requestLogTimestamp(for date: Date) -> String {
+        RequestLogDateFormatter.timestamp.string(from: date)
     }
 
     private func sanitized(_ value: String, fallback: String) -> String {
@@ -599,6 +690,141 @@ private struct AIProviderConfigTestResult: Identifiable {
     let id = UUID()
     let title: String
     let message: String
+}
+
+private struct AIProviderRequestLogDetailView: View {
+    let record: AIProviderRequestLogEntry
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LiquidBackground()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text(String(localized: "请求详情"))
+                                    .font(.headline)
+
+                                detailRow(
+                                    title: String(localized: "请求时间"),
+                                    value: RequestLogDateFormatter.timestamp.string(from: record.createdAt)
+                                )
+                                detailRow(
+                                    title: String(localized: "请求类型"),
+                                    value: record.operation.displayName
+                                )
+                                detailRow(
+                                    title: String(localized: "模型"),
+                                    value: record.model
+                                )
+                                detailRow(
+                                    title: String(localized: "请求地址"),
+                                    value: record.endpoint
+                                )
+                                detailRow(
+                                    title: String(localized: "请求状态"),
+                                    value: record.isSuccess ? String(localized: "成功") : String(localized: "失败"),
+                                    valueColor: record.isSuccess ? .green : .red
+                                )
+
+                                if let statusCode = record.statusCode {
+                                    detailRow(
+                                        title: String(localized: "状态码"),
+                                        value: String(statusCode)
+                                    )
+                                }
+
+                                if let errorMessage = record.errorMessage, errorMessage.isEmpty == false {
+                                    detailRow(
+                                        title: String(localized: "错误信息"),
+                                        value: errorMessage,
+                                        valueColor: .red
+                                    )
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxWidth: .infinity)
+
+                        DebugCodeSection(
+                            title: String(localized: "发起参数"),
+                            code: record.requestPayload
+                        )
+
+                        DebugCodeSection(
+                            title: String(localized: "接受参数"),
+                            code: record.responsePayload
+                        )
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
+            .navigationTitle(String(localized: "请求详情"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(String(localized: "关闭")) {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func detailRow(title: String, value: String, valueColor: Color = .primary) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text(value)
+                .font(.subheadline)
+                .foregroundStyle(valueColor)
+                .textSelection(.enabled)
+        }
+    }
+}
+
+private struct DebugCodeSection: View {
+    let title: String
+    let code: String
+
+    var body: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title)
+                    .font(.headline)
+
+                ScrollView(.horizontal, showsIndicators: true) {
+                    Text(code.isEmpty ? String(localized: "暂无内容") : code)
+                        .font(.system(size: 13, weight: .regular, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(uiColor: .tertiarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private enum RequestLogDateFormatter {
+    static let timestamp: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .autoupdatingCurrent
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
 }
 
 private struct AppearanceModeSelectionView: View {

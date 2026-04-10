@@ -9,6 +9,7 @@ enum AppSettingsKeys {
 
 enum AIProvider: String, CaseIterable, Identifiable {
     case kimi
+    case doubao
     case deepSeek = "deepseek"
     case miniMax = "minimax"
     case xiaomiMiMo = "xiaomi-mimo"
@@ -19,6 +20,8 @@ enum AIProvider: String, CaseIterable, Identifiable {
         switch self {
         case .kimi:
             return "Kimi"
+        case .doubao:
+            return "Doubao"
         case .deepSeek:
             return "DeepSeek"
         case .miniMax:
@@ -32,6 +35,8 @@ enum AIProvider: String, CaseIterable, Identifiable {
         switch self {
         case .kimi:
             return String(localized: "Moonshot AI · OpenAI 兼容接口")
+        case .doubao:
+            return String(localized: "火山方舟 · OpenAI 兼容接口")
         case .deepSeek:
             return String(localized: "深度求索 · OpenAI 兼容接口")
         case .miniMax:
@@ -45,6 +50,8 @@ enum AIProvider: String, CaseIterable, Identifiable {
         switch self {
         case .kimi:
             return "https://api.moonshot.cn/v1"
+        case .doubao:
+            return "https://ark.cn-beijing.volces.com/api/v3"
         case .deepSeek:
             return "https://api.deepseek.com"
         case .miniMax:
@@ -58,6 +65,8 @@ enum AIProvider: String, CaseIterable, Identifiable {
         switch self {
         case .kimi:
             return "kimi-k2.5"
+        case .doubao:
+            return "doubao-seed-2-0-lite-260215"
         case .deepSeek:
             return "deepseek-chat"
         case .miniMax:
@@ -71,6 +80,12 @@ enum AIProvider: String, CaseIterable, Identifiable {
         switch self {
         case .kimi:
             return ["kimi-k2.5"]
+        case .doubao:
+            return [
+                "doubao-seed-2-0-lite-260215",
+                "doubao-seed-2-0-mini-260215",
+                "doubao-seed-2-0-pro-260215"
+            ]
         case .deepSeek:
             return ["deepseek-chat", "deepseek-reasoner"]
         case .miniMax:
@@ -89,7 +104,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         switch self {
         case .kimi, .deepSeek:
             return true
-        case .miniMax, .xiaomiMiMo:
+        case .doubao, .miniMax, .xiaomiMiMo:
             return false
         }
     }
@@ -97,6 +112,8 @@ enum AIProvider: String, CaseIterable, Identifiable {
     func allowsTemperature(for model: String) -> Bool {
         switch self {
         case .kimi:
+            return true
+        case .doubao:
             return true
         case .deepSeek:
             return model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "deepseek-reasoner"
@@ -115,7 +132,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         switch self {
         case .xiaomiMiMo:
             return "max_completion_tokens"
-        case .kimi, .deepSeek, .miniMax:
+        case .kimi, .doubao, .deepSeek, .miniMax:
             return "max_tokens"
         }
     }
@@ -128,6 +145,8 @@ enum AIProviderSettingsKeys {
         switch provider {
         case .kimi:
             return "settings.kimi.baseURL"
+        case .doubao:
+            return "settings.doubao.baseURL"
         case .deepSeek:
             return "settings.deepseek.baseURL"
         case .miniMax:
@@ -141,6 +160,8 @@ enum AIProviderSettingsKeys {
         switch provider {
         case .kimi:
             return "settings.kimi.model"
+        case .doubao:
+            return "settings.doubao.model"
         case .deepSeek:
             return "settings.deepseek.model"
         case .miniMax:
@@ -154,6 +175,8 @@ enum AIProviderSettingsKeys {
         switch provider {
         case .kimi:
             return "settings.kimi.apiKey"
+        case .doubao:
+            return "settings.doubao.apiKey"
         case .deepSeek:
             return "settings.deepseek.apiKey"
         case .miniMax:
@@ -167,6 +190,8 @@ enum AIProviderSettingsKeys {
         switch provider {
         case .kimi:
             return "settings.kimi.maxTokens"
+        case .doubao:
+            return "settings.doubao.maxTokens"
         case .deepSeek:
             return "settings.deepseek.maxTokens"
         case .miniMax:
@@ -180,6 +205,8 @@ enum AIProviderSettingsKeys {
         switch provider {
         case .kimi:
             return "settings.kimi.temperature"
+        case .doubao:
+            return "settings.doubao.temperature"
         case .deepSeek:
             return "settings.deepseek.temperature"
         case .miniMax:
@@ -193,6 +220,8 @@ enum AIProviderSettingsKeys {
         switch provider {
         case .kimi:
             return "settings.kimi.topP"
+        case .doubao:
+            return "settings.doubao.topP"
         case .deepSeek:
             return "settings.deepseek.topP"
         case .miniMax:
@@ -287,6 +316,14 @@ struct AIProviderRuntimeConfig {
         }
 
         return URL(string: normalized)
+    }
+
+    var summaryModelDisplayName: String {
+        let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedModel.isEmpty == false else {
+            return provider.displayName
+        }
+        return "\(provider.displayName) · \(trimmedModel)"
     }
 }
 

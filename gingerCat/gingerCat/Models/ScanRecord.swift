@@ -10,6 +10,8 @@ enum ScanIntent: String, CaseIterable, Codable {
 final class ScanRecord {
     var id: UUID
     var createdAt: Date
+    var summaryUpdatedAt: Date?
+    var summaryModelName: String?
     var imageData: Data?
     var source: String
     var recognizedText: String
@@ -30,6 +32,8 @@ final class ScanRecord {
     init(
         id: UUID = UUID(),
         createdAt: Date = .now,
+        summaryUpdatedAt: Date? = nil,
+        summaryModelName: String? = nil,
         imageData: Data? = nil,
         source: String,
         recognizedText: String,
@@ -49,6 +53,8 @@ final class ScanRecord {
     ) {
         self.id = id
         self.createdAt = createdAt
+        self.summaryUpdatedAt = summaryUpdatedAt
+        self.summaryModelName = summaryModelName
         self.imageData = imageData
         self.source = source
         self.recognizedText = recognizedText
@@ -101,6 +107,7 @@ extension ScanRecord {
     static func previewData() -> [ScanRecord] {
         [
             ScanRecord(
+                summaryUpdatedAt: .now,
                 source: "Photo",
                 recognizedText: "4月10日 19:30 产品评审会，线上会议室 A",
                 summary: "4月10日 19:30 产品评审会，线上会议室A。",
@@ -116,6 +123,7 @@ extension ScanRecord {
                 hasAddedTodoReminder: true
             ),
             ScanRecord(
+                summaryUpdatedAt: .now,
                 source: "Camera",
                 recognizedText: "会议纪要：重点优化首页转化路径与埋点完整性。",
                 summary: "这张图主要是会议纪要，不包含明确时间信息。",

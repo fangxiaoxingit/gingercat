@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A100000D2F862934003682F1 /* gingerCatShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A10000022F862934003682F1 /* gingerCatShareExtension.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		B100000D2F862934003682F1 /* gingerCatLiveActivityWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = B10000022F862934003682F1 /* gingerCatLiveActivityWidget.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		273234072F862934003682F1 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,12 +26,43 @@
 			remoteGlobalIDString = 273233F62F862932003682F1;
 			remoteInfo = gingerCat;
 		};
+		A100000A2F862934003682F1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 273233EF2F862932003682F1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000062F862934003682F1;
+			remoteInfo = gingerCatShareExtension;
+		};
+		B100000A2F862934003682F1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 273233EF2F862932003682F1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B10000062F862934003682F1;
+			remoteInfo = gingerCatLiveActivityWidget;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A100000C2F862934003682F1 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A100000D2F862934003682F1 /* gingerCatShareExtension.appex in Embed App Extensions */,
+				B100000D2F862934003682F1 /* gingerCatLiveActivityWidget.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		273233F72F862932003682F1 /* gingerCat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = gingerCat.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		273234062F862934003682F1 /* gingerCatTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = gingerCatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		273234102F862934003682F1 /* gingerCatUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = gingerCatUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000022F862934003682F1 /* gingerCatShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = gingerCatShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10000022F862934003682F1 /* gingerCatLiveActivityWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = gingerCatLiveActivityWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -43,6 +79,16 @@
 		273234132F862934003682F1 /* gingerCatUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = gingerCatUITests;
+			sourceTree = "<group>";
+		};
+		A10000012F862934003682F1 /* gingerCatShareExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = gingerCatShareExtension;
+			sourceTree = "<group>";
+		};
+		B10000012F862934003682F1 /* gingerCatLiveActivityWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = gingerCatLiveActivityWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -69,6 +115,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A10000032F862934003682F1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B10000032F862934003682F1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -78,6 +138,8 @@
 				273233F92F862932003682F1 /* gingerCat */,
 				273234092F862934003682F1 /* gingerCatTests */,
 				273234132F862934003682F1 /* gingerCatUITests */,
+				A10000012F862934003682F1 /* gingerCatShareExtension */,
+				B10000012F862934003682F1 /* gingerCatLiveActivityWidget */,
 				273233F82F862932003682F1 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -88,6 +150,8 @@
 				273233F72F862932003682F1 /* gingerCat.app */,
 				273234062F862934003682F1 /* gingerCatTests.xctest */,
 				273234102F862934003682F1 /* gingerCatUITests.xctest */,
+				A10000022F862934003682F1 /* gingerCatShareExtension.appex */,
+				B10000022F862934003682F1 /* gingerCatLiveActivityWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -102,10 +166,13 @@
 				273233F32F862932003682F1 /* Sources */,
 				273233F42F862932003682F1 /* Frameworks */,
 				273233F52F862932003682F1 /* Resources */,
+				A100000C2F862934003682F1 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A100000B2F862934003682F1 /* PBXTargetDependency */,
+				B100000B2F862934003682F1 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				273233F92F862932003682F1 /* gingerCat */,
@@ -163,6 +230,50 @@
 			productReference = 273234102F862934003682F1 /* gingerCatUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		A10000062F862934003682F1 /* gingerCatShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000072F862934003682F1 /* Build configuration list for PBXNativeTarget "gingerCatShareExtension" */;
+			buildPhases = (
+				A10000052F862934003682F1 /* Sources */,
+				A10000032F862934003682F1 /* Frameworks */,
+				A10000042F862934003682F1 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A10000012F862934003682F1 /* gingerCatShareExtension */,
+			);
+			name = gingerCatShareExtension;
+			packageProductDependencies = (
+			);
+			productName = gingerCatShareExtension;
+			productReference = A10000022F862934003682F1 /* gingerCatShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		B10000062F862934003682F1 /* gingerCatLiveActivityWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B10000072F862934003682F1 /* Build configuration list for PBXNativeTarget "gingerCatLiveActivityWidget" */;
+			buildPhases = (
+				B10000052F862934003682F1 /* Sources */,
+				B10000032F862934003682F1 /* Frameworks */,
+				B10000042F862934003682F1 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B10000012F862934003682F1 /* gingerCatLiveActivityWidget */,
+			);
+			name = gingerCatLiveActivityWidget;
+			packageProductDependencies = (
+			);
+			productName = gingerCatLiveActivityWidget;
+			productReference = B10000022F862934003682F1 /* gingerCatLiveActivityWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -184,6 +295,12 @@
 						CreatedOnToolsVersion = 26.4;
 						TestTargetID = 273233F62F862932003682F1;
 					};
+					A10000062F862934003682F1 = {
+						CreatedOnToolsVersion = 26.4;
+					};
+					B10000062F862934003682F1 = {
+						CreatedOnToolsVersion = 26.4;
+					};
 				};
 			};
 			buildConfigurationList = 273233F22F862932003682F1 /* Build configuration list for PBXProject "gingerCat" */;
@@ -203,6 +320,8 @@
 				273233F62F862932003682F1 /* gingerCat */,
 				273234052F862934003682F1 /* gingerCatTests */,
 				2732340F2F862934003682F1 /* gingerCatUITests */,
+				A10000062F862934003682F1 /* gingerCatShareExtension */,
+				B10000062F862934003682F1 /* gingerCatLiveActivityWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -223,6 +342,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		2732340E2F862934003682F1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000042F862934003682F1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B10000042F862934003682F1 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -253,6 +386,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A10000052F862934003682F1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B10000052F862934003682F1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -265,6 +412,16 @@
 			isa = PBXTargetDependency;
 			target = 273233F62F862932003682F1 /* gingerCat */;
 			targetProxy = 273234112F862934003682F1 /* PBXContainerItemProxy */;
+		};
+		A100000B2F862934003682F1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000062F862934003682F1 /* gingerCatShareExtension */;
+			targetProxy = A100000A2F862934003682F1 /* PBXContainerItemProxy */;
+		};
+		B100000B2F862934003682F1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B10000062F862934003682F1 /* gingerCatLiveActivityWidget */;
+			targetProxy = B100000A2F862934003682F1 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -395,19 +552,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = gingerCat/gingerCat.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = J5279V64S7;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "需要启动相机以即时扫描海报。";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "需要访问相册以分析截图内容。";
-				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "需要访问提醒事项以创建识别结果对应的提醒。";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/gingerCat-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -430,19 +581,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = gingerCat/gingerCat.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = J5279V64S7;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "需要启动相机以即时扫描海报。";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "需要访问相册以分析截图内容。";
-				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "需要访问提醒事项以创建识别结果对应的提醒。";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/gingerCat-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -544,6 +689,120 @@
 			};
 			name = Release;
 		};
+		A10000082F862934003682F1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = gingerCatShareExtension/gingerCatShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J5279V64S7;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/gingerCatShareExtension-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.siyufang.LivePhotoMakerUniversal.gingerCat.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A10000092F862934003682F1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = gingerCatShareExtension/gingerCatShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J5279V64S7;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/gingerCatShareExtension-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.siyufang.LivePhotoMakerUniversal.gingerCat.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		B10000082F862934003682F1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J5279V64S7;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/gingerCatLiveActivityWidget-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.siyufang.LivePhotoMakerUniversal.gingerCat.LiveActivityWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		B10000092F862934003682F1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J5279V64S7;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/gingerCatLiveActivityWidget-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.siyufang.LivePhotoMakerUniversal.gingerCat.LiveActivityWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -579,6 +838,24 @@
 			buildConfigurations = (
 				273234212F862934003682F1 /* Debug */,
 				273234222F862934003682F1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000072F862934003682F1 /* Build configuration list for PBXNativeTarget "gingerCatShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000082F862934003682F1 /* Debug */,
+				A10000092F862934003682F1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B10000072F862934003682F1 /* Build configuration list for PBXNativeTarget "gingerCatLiveActivityWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B10000082F862934003682F1 /* Debug */,
+				B10000092F862934003682F1 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
