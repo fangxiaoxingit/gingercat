@@ -40,7 +40,6 @@ struct HomeScannerView: View {
     @State private var isSettingsPresented = false
     @State private var isArchivePresented = false
     @State private var selectedRecordRoute: RecordDetailRoute?
-    @State private var revealedQuickAddActions: Set<QuickAddAction> = []
     @State private var quickAddAnimationTask: Task<Void, Never>?
     @ObservedObject private var recordNavigationCenter = RecordNavigationCenter.shared
     @GestureState private var isQuickAddPressed = false
@@ -420,38 +419,34 @@ struct HomeScannerView: View {
     private var addMenuCluster: some View {
         ZStack(alignment: .bottomTrailing) {
             addMenuActionButtonsLayout
-                .frame(width: 220, height: 220, alignment: .bottomTrailing)
+                .frame(width: quickAddClusterSize, height: quickAddClusterSize, alignment: .bottomTrailing)
                 .allowsHitTesting(isAddMenuExpanded)
                 .zIndex(1)
 
             quickAddButton
-                .zIndex(2)
+                .zIndex(10)
         }
-        .frame(width: 220, height: 220, alignment: .bottomTrailing)
+        .frame(width: quickAddClusterSize, height: quickAddClusterSize, alignment: .bottomTrailing)
     }
 
     private var addMenuActionButtonsLayout: some View {
-        ZStack(alignment: .bottomTrailing) {
+        ZStack {
             ForEach(QuickAddAction.allCases) { action in
-                let isVisible = revealedQuickAddActions.contains(action)
                 AddMenuActionButton(
                     systemImage: action.systemImage,
                     tint: AppTheme.primary
                 ) {
                     handleQuickAddAction(action)
                 }
-                // 二级按钮与主按钮共用同一个中心点，避免视觉位置正确但命中区域仍落在主按钮 background 外侧。
-                .offset(
-                    x: (isVisible ? action.offset.width : 0) - 5,
-                    y: (isVisible ? action.offset.height : 0) - 5
-                )
-                .scaleEffect(isVisible ? 1 : 0.18, anchor: .center)
-                .opacity(isVisible ? 1 : 0)
-                .brightness(isVisible ? 0 : 0.05)
-                .allowsHitTesting(isVisible)
+                .offset(isAddMenuExpanded ? action.offset : .zero)
+                .scaleEffect(isAddMenuExpanded ? 1 : 0.01, anchor: .center)
+                .allowsHitTesting(isAddMenuExpanded)
+                .animation(quickAddAnimation(for: action), value: isAddMenuExpanded)
                 .zIndex(Double(action.animationIndex))
             }
         }
+        .frame(width: 1, height: 1)
+        .position(x: quickAddAnchorPosition.x, y: quickAddAnchorPosition.y)
     }
 
     private var quickAddButton: some View {
@@ -1065,17 +1060,20 @@ struct HomeScannerView: View {
     private func collapseAddMenu() {
         guard isAddMenuExpanded else { return }
         quickAddAnimationTask?.cancel()
-        quickAddAnimationTask = Task { @MainActor in
-            await animateQuickAddMenuCollapse()
-        }
+        quickAddAnimationTask = nil
+        isAddMenuExpanded = false
     }
 
     // 菜单点击后先收起圆环，再分发到具体入口，避免出现弹窗时菜单还停留在页面上。
     @MainActor
     private func handleQuickAddAction(_ action: QuickAddAction) {
+        guard isAddMenuExpanded else { return }
         quickAddAnimationTask?.cancel()
+        isAddMenuExpanded = false
         quickAddAnimationTask = Task { @MainActor in
-            await animateQuickAddMenuCollapse()
+            try? await Task.sleep(for: quickAddCollapseDuration)
+            guard Task.isCancelled == false else { return }
+            quickAddAnimationTask = nil
             triggerHaptic()
 
             switch action {
@@ -1100,33 +1098,36 @@ struct HomeScannerView: View {
     @MainActor
     private func expandAddMenu() {
         quickAddAnimationTask?.cancel()
+        quickAddAnimationTask = nil
         isAddMenuExpanded = true
-        revealedQuickAddActions.removeAll()
-        quickAddAnimationTask = Task { @MainActor in
-            for action in QuickAddAction.allCases.sorted(by: { $0.animationIndex < $1.animationIndex }) {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                    // 显式丢弃 Set 返回值，避免 withAnimation 被推断为非 Void 返回导致编译告警。
-                    _ = revealedQuickAddActions.insert(action)
-                }
-                try? await Task.sleep(for: .milliseconds(55))
-            }
-        }
     }
 
-    @MainActor
-    private func animateQuickAddMenuCollapse() async {
-        guard isAddMenuExpanded else { return }
-
-        for action in QuickAddAction.allCases.sorted(by: { $0.animationIndex > $1.animationIndex }) {
-            withAnimation(.spring(response: 0.22, dampingFraction: 0.88)) {
-                // remove 返回被移除元素，动画闭包这里不需要该值，显式丢弃以消除告警。
-                _ = revealedQuickAddActions.remove(action)
-            }
-            try? await Task.sleep(for: .milliseconds(40))
-        }
-
-        isAddMenuExpanded = false
+    private func quickAddAnimation(for action: QuickAddAction) -> Animation {
+        let expandDelay = Double(action.animationIndex) * 0.055
+        let collapseDelay = Double(QuickAddAction.allCases.count - 1 - action.animationIndex) * 0.055
+        return .spring(
+            response: isAddMenuExpanded ? 0.28 : 0.22,
+            dampingFraction: isAddMenuExpanded ? 0.82 : 0.88
+        )
+        .delay(isAddMenuExpanded ? expandDelay : collapseDelay)
     }
+
+    private var quickAddCollapseDuration: Duration {
+        let lastActionDelay = Double(max(QuickAddAction.allCases.count - 1, 0)) * 0.055
+        let totalSeconds = lastActionDelay + 0.22
+        return .milliseconds(Int((totalSeconds * 1000).rounded(.up)))
+    }
+
+    private var quickAddAnchorPosition: CGPoint {
+        CGPoint(
+            x: quickAddClusterSize - (quickAddPrimaryButtonSize / 2),
+            y: quickAddClusterSize - (quickAddPrimaryButtonSize / 2)
+        )
+    }
+
+    private var quickAddClusterSize: CGFloat { 220 }
+
+    private var quickAddPrimaryButtonSize: CGFloat { 66 }
 
     private func buildPipelineResultFromAI(
         recognizedText: String,
@@ -1451,11 +1452,11 @@ private enum QuickAddAction: CaseIterable, Identifiable {
 
     var animationIndex: Int {
         switch self {
-        case .camera:
-            return 0
         case .text:
-            return 1
+            return 0
         case .photo:
+            return 1
+        case .camera:
             return 2
         }
     }
@@ -1501,22 +1502,26 @@ private struct AddMenuActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(iconColor)
-                .frame(width: 56, height: 56)
-                .background {
-                    if #available(iOS 26.0, *) {
-                        Circle()
-                            .fill(Color.clear)
-                    } else {
-                        Circle()
-                            .fill(buttonFillColor)
-                    }
+            ZStack {
+                if #available(iOS 26.0, *) {
+                    Circle()
+                        .fill(Color.clear)
+                } else {
+                    Circle()
+                        .fill(buttonFillColor)
                 }
+
+                Image(systemName: systemImage)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(iconColor)
+            }
+            .frame(width: 56, height: 56)
         }
         .buttonStyle(.plain)
         .modifier(AddMenuActionGlassModifier(tint: tint, colorScheme: colorScheme))
+        .padding(6)
+        .contentShape(Circle())
+        .accessibilityLabel(accessibilityTitle)
     }
 
     private var iconColor: Color {
@@ -1525,6 +1530,19 @@ private struct AddMenuActionButton: View {
 
     private var buttonFillColor: Color {
         colorScheme == .dark ? Color(uiColor: .secondarySystemBackground) : .white
+    }
+
+    private var accessibilityTitle: String {
+        switch systemImage {
+        case "square.and.pencil":
+            return String(localized: "添加文字")
+        case "photo.on.rectangle.angled":
+            return String(localized: "添加相册图片")
+        case "camera":
+            return String(localized: "添加拍照图片")
+        default:
+            return systemImage
+        }
     }
 }
 
