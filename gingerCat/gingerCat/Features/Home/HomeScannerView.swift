@@ -1143,13 +1143,14 @@ struct HomeScannerView: View {
         let normalizedTimeValue = normalizedTime(insight.time)
         let resolvedEventTime = normalizedTimeValue ?? "00:00"
         let date = parsedEventDate(date: insight.date, time: resolvedEventTime)
-        let todo = insight.needTodo && date != nil
+        let hasScheduleDate = date != nil
+        let todo = insight.needTodo
         let descriptionText = (resolvedDescription?.isEmpty == false) ? resolvedDescription : resolvedSummary
 
         return OCRPipelineResult(
             recognizedText: recognizedText,
             summary: resolvedSummary,
-            intent: todo ? .schedule : .summary,
+            intent: hasScheduleDate ? .schedule : .summary,
             eventTitle: resolvedTitle,
             eventDate: date,
             eventTime: normalizedTimeValue,

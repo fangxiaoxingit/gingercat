@@ -26,6 +26,7 @@ struct AIProviderRequestLogEntry: Codable, Identifiable, Hashable {
     let requestPayload: String
     let responsePayload: String
     let errorMessage: String?
+    let totalTokens: Int?
 
     init(
         id: UUID = UUID(),
@@ -38,7 +39,8 @@ struct AIProviderRequestLogEntry: Codable, Identifiable, Hashable {
         statusCode: Int?,
         requestPayload: String,
         responsePayload: String,
-        errorMessage: String?
+        errorMessage: String?,
+        totalTokens: Int? = nil
     ) {
         self.id = id
         self.providerRawValue = provider.rawValue
@@ -51,6 +53,7 @@ struct AIProviderRequestLogEntry: Codable, Identifiable, Hashable {
         self.requestPayload = requestPayload
         self.responsePayload = responsePayload
         self.errorMessage = errorMessage
+        self.totalTokens = totalTokens
     }
 
     var provider: AIProvider {
@@ -59,6 +62,11 @@ struct AIProviderRequestLogEntry: Codable, Identifiable, Hashable {
 
     var operation: AIProviderRequestOperation {
         AIProviderRequestOperation(rawValue: operationRawValue) ?? .configTest
+    }
+
+    var totalTokensText: String? {
+        guard let totalTokens else { return nil }
+        return String(localized: "总计 \(totalTokens) tokens")
     }
 }
 
@@ -92,7 +100,45 @@ enum AIProviderRequestLogStore {
         defaults.set(data, forKey: storageKey(for: entry.provider))
     }
 
+    static func clear(
+        provider: AIProvider,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.removeObject(forKey: storageKey(for: provider))
+    }
+
     private static func storageKey(for provider: AIProvider) -> String {
         "settings.ai.requestLogs.\(provider.rawValue)"
+    }
+}
+
+struct AIProviderConfigTestStatus: Codable, Hashable {
+    let lastTestAt: Date
+    let isSuccess: Bool
+}
+
+enum AIProviderConfigTestStatusStore {
+    static func status(
+        for provider: AIProvider,
+        defaults: UserDefaults = .standard
+    ) -> AIProviderConfigTestStatus? {
+        guard let data = defaults.data(forKey: storageKey(for: provider)),
+              let decoded = try? JSONDecoder().decode(AIProviderConfigTestStatus.self, from: data) else {
+            return nil
+        }
+        return decoded
+    }
+
+    static func persist(
+        _ status: AIProviderConfigTestStatus,
+        for provider: AIProvider,
+        defaults: UserDefaults = .standard
+    ) {
+        guard let data = try? JSONEncoder().encode(status) else { return }
+        defaults.set(data, forKey: storageKey(for: provider))
+    }
+
+    private static func storageKey(for provider: AIProvider) -> String {
+        "settings.ai.testStatus.\(provider.rawValue)"
     }
 }

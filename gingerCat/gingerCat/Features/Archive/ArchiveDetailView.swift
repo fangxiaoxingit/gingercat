@@ -22,7 +22,6 @@ struct ArchiveDetailView: View {
     @State private var isReminderEditorPresented = false
     @State private var reminderDraft = ReminderDraft.empty
     @State private var isDeleteConfirmationPresented = false
-    @State private var isRepeatTodoConfirmationPresented = false
     @State private var showRepeatTodoHintInEditor = false
     @State private var toastMessage: String?
     @State private var toastDismissTask: Task<Void, Never>?
@@ -60,10 +59,12 @@ struct ArchiveDetailView: View {
                         presentReminderEditor()
                     } label: {
                         Label(
-                            record.hasAddedTodoReminder ? String(localized: "再次加入待办提醒") : String(localized: "加入待办提醒"),
+                            String(localized: "加入待办提醒"),
                             systemImage: "checklist"
                         )
                     }
+
+                    Divider()
 
                     Button {
                         showGenerationToast()
@@ -91,10 +92,12 @@ struct ArchiveDetailView: View {
                     }
                     .disabled(isRunningLocalOCR || isRunningAISummary)
 
+                    Divider()
+
                     Button(role: .destructive) {
                         isDeleteConfirmationPresented = true
                     } label: {
-                        Label(String(localized: "删除"), systemImage: "trash")
+                        Label(String(localized: "删除记录"), systemImage: "trash")
                     }
                 } label: {
                     Image(systemName: "ellipsis")
@@ -124,31 +127,13 @@ struct ArchiveDetailView: View {
             )
             .presentationDetents([.medium, .large])
         }
-        .confirmationDialog(
-            String(localized: "确认删除这条记录？"),
-            isPresented: $isDeleteConfirmationPresented,
-            titleVisibility: .visible
-        ) {
+        .alert(String(localized: "确认删除这条记录？"), isPresented: $isDeleteConfirmationPresented) {
+            Button(String(localized: "取消"), role: .cancel) {}
             Button(String(localized: "删除"), role: .destructive) {
                 deleteRecord()
             }
-            Button(String(localized: "取消"), role: .cancel) {}
         } message: {
             Text(String(localized: "删除后无法恢复。"))
-        }
-        .confirmationDialog(
-            String(localized: "这条记录已添加过待办事项"),
-            isPresented: $isRepeatTodoConfirmationPresented,
-            titleVisibility: .visible
-        ) {
-            Button(String(localized: "继续添加"), role: .destructive) {
-                showRepeatTodoHintInEditor = true
-                reminderDraft = ReminderDraft(record: record)
-                isReminderEditorPresented = true
-            }
-            Button(String(localized: "取消"), role: .cancel) {}
-        } message: {
-            Text(String(localized: "继续添加会生成重复待办，请确认后再操作。"))
         }
         .alert(item: $reminderFeedback) { feedback in
             Alert(
@@ -166,9 +151,6 @@ struct ArchiveDetailView: View {
     private var detailSections: some View {
         VStack(alignment: .leading, spacing: 14) {
             imageHeroSection
-            if record.hasAddedTodoReminder {
-                repeatTodoReminderBanner
-            }
             mergedRecordCard
             noteCard
         }
@@ -251,18 +233,6 @@ struct ArchiveDetailView: View {
         }
     }
 
-    private var repeatTodoReminderBanner: some View {
-        GlassCard {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                Text(String(localized: "这条记录已添加过待办事项，再次添加前请确认是否需要重复创建。"))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
     private var mergedRecordCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
@@ -272,17 +242,10 @@ struct ArchiveDetailView: View {
 
                     Spacer(minLength: 0)
 
-                    if canShowReminderAction {
-                        Button {
-                            presentReminderEditor()
-                        } label: {
-                            Text(reminderActionTitle)
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(AppTheme.primary)
+                    if record.hasAddedTodoReminder {
+                        Label(String(localized: "已添加"), systemImage: "checkmark.circle.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppTheme.primary)
                     }
                 }
 
@@ -417,12 +380,11 @@ struct ArchiveDetailView: View {
     }
 
     private func presentReminderEditor() {
-        if record.hasAddedTodoReminder {
-            isRepeatTodoConfirmationPresented = true
-            return
-        }
+        showRepeatTodoHintInEditor = record.hasAddedTodoReminder
+        openReminderEditor()
+    }
 
-        showRepeatTodoHintInEditor = false
+    private func openReminderEditor() {
         reminderDraft = ReminderDraft(record: record)
         isReminderEditorPresented = true
     }
@@ -562,13 +524,14 @@ struct ArchiveDetailView: View {
         let normalizedTimeValue = normalizedTime(insight.time)
         let resolvedEventTime = normalizedTimeValue ?? "00:00"
         let date = parsedEventDate(date: insight.date, time: resolvedEventTime)
-        let needTodo = insight.needTodo && date != nil
+        let hasScheduleDate = date != nil
+        let needTodo = insight.needTodo
         let descriptionText = (resolvedDescription?.isEmpty == false) ? resolvedDescription : resolvedSummary
 
         record.recognizedText = recognizedText
         record.ocrLineBoxes = lineBoxes
         record.summary = resolvedSummary
-        record.intent = (needTodo ? ScanIntent.schedule : ScanIntent.summary).rawValue
+        record.intent = (hasScheduleDate ? ScanIntent.schedule : ScanIntent.summary).rawValue
         record.eventTitle = resolvedTitle
         record.eventDate = date
         record.eventTime = normalizedTimeValue
@@ -638,16 +601,6 @@ struct ArchiveDetailView: View {
     private var resolvedKeywords: String {
         let keywords = record.eventKeywords
         return keywords.isEmpty ? String(localized: "无") : keywords.joined(separator: " / ")
-    }
-
-    private var canShowReminderAction: Bool {
-        (record.eventDate ?? .distantPast) > .now
-    }
-
-    private var reminderActionTitle: String {
-        record.hasAddedTodoReminder
-            ? String(localized: "再次加入")
-            : String(localized: "加入待办")
     }
 
     private var todoReminderStatusText: String {
@@ -896,9 +849,11 @@ private struct ReminderDraftEditorView: View {
             Form {
                 if showRepeatHint {
                     Section {
-                        Text(String(localized: "这条记录已经添加过待办事项，请再次确认是否需要重复创建。"))
+                        Text(String(localized: "该记录已添加过待办提醒，继续添加会创建重复待办。"))
                             .font(.footnote)
                             .foregroundStyle(.orange)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .multilineTextAlignment(.center)
                     }
                 }
 

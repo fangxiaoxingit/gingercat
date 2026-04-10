@@ -49,7 +49,8 @@ enum AIProviderService {
                 ]
             ],
             config: config,
-            operation: .configTest
+            operation: .configTest,
+            requestLogDisplayText: prompt
         )
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else {
@@ -78,7 +79,8 @@ enum AIProviderService {
                 ],
                 config: config,
                 responseFormat: config.provider.supportsJSONOutput ? ["type": "json_object"] : nil,
-                operation: .ocrAnalysis
+                operation: .ocrAnalysis,
+                requestLogDisplayText: rawText
             )
         }
         return try decodeInsight(from: content, provider: config.provider)
@@ -114,11 +116,12 @@ enum AIProviderService {
         messages: [[String: String]],
         config: AIProviderRuntimeConfig,
         responseFormat: [String: Any]? = nil,
-        operation: AIProviderRequestOperation
+        operation: AIProviderRequestOperation,
+        requestLogDisplayText: String
     ) async throws -> String {
         let payload = requestBody(messages: messages, config: config, responseFormat: responseFormat)
         let requestData = try JSONSerialization.data(withJSONObject: payload, options: [])
-        let requestPayload = formattedPayload(from: requestData)
+        let requestPayload = truncatedLogPayload(requestLogDisplayText.trimmingCharacters(in: .whitespacesAndNewlines))
 
         guard config.canRequestSummary, let url = config.chatCompletionsURL else {
             let error = AIProviderServiceError.invalidConfiguration(config.provider)
@@ -131,7 +134,8 @@ enum AIProviderService {
                 isSuccess: false,
                 requestPayload: requestPayload,
                 responsePayload: String(localized: "配置不完整，未发起网络请求。"),
-                errorMessage: error.localizedDescription
+                errorMessage: error.localizedDescription,
+                totalTokens: nil
             )
             throw error
         }
@@ -178,8 +182,9 @@ enum AIProviderService {
                 statusCode: statusCode,
                 isSuccess: true,
                 requestPayload: requestPayload,
-                responsePayload: responsePayload,
-                errorMessage: nil
+                responsePayload: content,
+                errorMessage: nil,
+                totalTokens: decoded.usage?.totalTokens
             )
             return content
         } catch let error as AIProviderServiceError {
@@ -192,7 +197,8 @@ enum AIProviderService {
                 isSuccess: false,
                 requestPayload: requestPayload,
                 responsePayload: responsePayload,
-                errorMessage: error.localizedDescription
+                errorMessage: error.localizedDescription,
+                totalTokens: nil
             )
             throw error
         } catch {
@@ -205,7 +211,8 @@ enum AIProviderService {
                 isSuccess: false,
                 requestPayload: requestPayload,
                 responsePayload: responsePayload,
-                errorMessage: error.localizedDescription
+                errorMessage: error.localizedDescription,
+                totalTokens: nil
             )
             throw error
         }
@@ -376,7 +383,8 @@ enum AIProviderService {
         isSuccess: Bool,
         requestPayload: String,
         responsePayload: String,
-        errorMessage: String?
+        errorMessage: String?,
+        totalTokens: Int?
     ) {
         AIProviderRequestLogStore.append(
             AIProviderRequestLogEntry(
@@ -388,7 +396,8 @@ enum AIProviderService {
                 statusCode: statusCode,
                 requestPayload: requestPayload,
                 responsePayload: truncatedLogPayload(responsePayload),
-                errorMessage: errorMessage
+                errorMessage: errorMessage,
+                totalTokens: totalTokens
             )
         )
     }
@@ -465,7 +474,20 @@ private struct ChatCompletionResponse: Decodable {
         let text: String?
     }
 
+    struct Usage: Decodable {
+        let promptTokens: Int?
+        let completionTokens: Int?
+        let totalTokens: Int?
+
+        private enum CodingKeys: String, CodingKey {
+            case promptTokens = "prompt_tokens"
+            case completionTokens = "completion_tokens"
+            case totalTokens = "total_tokens"
+        }
+    }
+
     let choices: [Choice]
+    let usage: Usage?
 }
 
 private struct APIErrorEnvelope: Decodable {

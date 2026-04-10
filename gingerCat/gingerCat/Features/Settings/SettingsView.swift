@@ -258,6 +258,9 @@ private struct AIProviderConfigView: View {
     @State private var topP = ""
     @State private var isTestingConfig = false
     @State private var testResult: AIProviderConfigTestResult?
+    @State private var lastTestStatus: AIProviderConfigTestStatus?
+    @State private var isAdvancedParametersExpanded = false
+    @State private var isRequestLogsVisible = false
     @State private var requestLogs: [AIProviderRequestLogEntry] = []
     @State private var selectedRequestLog: AIProviderRequestLogEntry?
 
@@ -294,6 +297,7 @@ private struct AIProviderConfigView: View {
         }
         .task {
             loadStoredConfig()
+            loadTestStatus()
             loadRequestLogs()
         }
         .onDisappear {
@@ -301,6 +305,7 @@ private struct AIProviderConfigView: View {
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
+            loadTestStatus()
             loadRequestLogs()
         }
     }
@@ -328,29 +333,7 @@ private struct AIProviderConfigView: View {
 
                     Divider()
 
-                    Text(String(localized: "模型参数（可选）"))
-                        .font(.subheadline.weight(.semibold))
-
-                    settingTextField(
-                        title: String(localized: "max_tokens"),
-                        placeholder: String(localized: "留空使用服务端默认"),
-                        text: binding(for: .maxTokens)
-                    )
-                    .keyboardType(.numberPad)
-
-                    settingTextField(
-                        title: String(localized: "temperature"),
-                        placeholder: provider.allowsTemperature(for: modelID) ? String(localized: "留空使用服务端默认") : String(localized: "当前模型通常忽略该参数"),
-                        text: binding(for: .temperature)
-                    )
-                    .keyboardType(.decimalPad)
-
-                    settingTextField(
-                        title: String(localized: "top_p"),
-                        placeholder: provider.allowsTopP(for: modelID) ? String(localized: "留空使用服务端默认") : String(localized: "当前模型通常忽略该参数"),
-                        text: binding(for: .topP)
-                    )
-                    .keyboardType(.decimalPad)
+                    optionalParametersSection
 
                     Divider()
 
@@ -382,14 +365,38 @@ private struct AIProviderConfigView: View {
                     .buttonStyle(.plain)
                     .disabled(isTestingConfig)
 
+                    if let lastTestStatus {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: lastTestStatus.isSuccess ? "checkmark.seal.fill" : "xmark.seal.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(lastTestStatus.isSuccess ? .green : .red)
+                                .padding(.top, 2)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(String(localized: "上次测试时间"))：\(requestLogTimestamp(for: lastTestStatus.lastTestAt))")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+
+                                Text("\(String(localized: "测试结果"))：\(lastTestStatus.isSuccess ? String(localized: "成功") : String(localized: "失败"))")
+                                    .font(.footnote)
+                                    .foregroundStyle(lastTestStatus.isSuccess ? .green : .red)
+                            }
+                        }
+                    }
+
                     Text(String(localized: "点击后会发送一条测试提示词，验证当前模型和参数是否可用。"))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            requestLogsSection
+            if isRequestLogsVisible {
+                requestLogsSection
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: isAdvancedParametersExpanded)
+        .animation(.easeInOut(duration: 0.22), value: isRequestLogsVisible)
     }
 
     private var providerHeader: some View {
@@ -397,6 +404,8 @@ private struct AIProviderConfigView: View {
             HStack {
                 Text(provider.displayName)
                     .font(.headline)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2, perform: toggleRequestLogsVisibility)
                 Spacer(minLength: 0)
                 Image(systemName: selectedProviderRaw == provider.rawValue ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(selectedProviderRaw == provider.rawValue ? AppTheme.primary : .secondary)
@@ -410,6 +419,52 @@ private struct AIProviderConfigView: View {
                 Text(providerGuidanceText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var optionalParametersSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button(action: toggleAdvancedParameters) {
+                HStack(spacing: 10) {
+                    Text(String(localized: "模型参数（可选）"))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: isAdvancedParametersExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isAdvancedParametersExpanded {
+                VStack(alignment: .leading, spacing: 12) {
+                    settingTextField(
+                        title: String(localized: "max_tokens"),
+                        placeholder: String(localized: "留空使用服务端默认"),
+                        text: binding(for: .maxTokens)
+                    )
+                    .keyboardType(.numberPad)
+
+                    settingTextField(
+                        title: String(localized: "temperature"),
+                        placeholder: provider.allowsTemperature(for: modelID) ? String(localized: "留空使用服务端默认") : String(localized: "当前模型通常忽略该参数"),
+                        text: binding(for: .temperature)
+                    )
+                    .keyboardType(.decimalPad)
+
+                    settingTextField(
+                        title: String(localized: "top_p"),
+                        placeholder: provider.allowsTopP(for: modelID) ? String(localized: "留空使用服务端默认") : String(localized: "当前模型通常忽略该参数"),
+                        text: binding(for: .topP)
+                    )
+                    .keyboardType(.decimalPad)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
@@ -488,6 +543,7 @@ private struct AIProviderConfigView: View {
                 String(localized: "请用 30 个字介绍你是什么模型，目前的参数是什么，来自哪家公司"),
                 config: config
             )
+            persistTestStatus(isSuccess: true)
             testResult = AIProviderConfigTestResult(
                 title: String(localized: "测试成功"),
                 message: reply
@@ -511,6 +567,10 @@ private struct AIProviderConfigView: View {
 
     private func loadRequestLogs() {
         requestLogs = AIProviderRequestLogStore.logs(for: provider)
+    }
+
+    private func loadTestStatus() {
+        lastTestStatus = AIProviderConfigTestStatusStore.status(for: provider)
     }
 
     private func persistCurrentConfig() {
@@ -579,68 +639,17 @@ private struct AIProviderConfigView: View {
     }
 
     private var requestLogsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(String(localized: "请求记录"))
-                .font(.headline)
-                .foregroundStyle(.primary)
-
-            GlassCard(cornerRadius: 18) {
-                if requestLogs.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(String(localized: "还没有请求记录"))
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-
-                        Text(String(localized: "点击上方“测试配置”，或在首页触发 AI 摘要后，这里会展示每次请求的时间、结果和调试详情。"))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(requestLogs.indices, id: \.self) { index in
-                            let record = requestLogs[index]
-                            Button {
-                                selectedRequestLog = record
-                            } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: record.isSuccess ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                        .font(.body.weight(.semibold))
-                                        .foregroundStyle(record.isSuccess ? .green : .red)
-                                        .frame(width: 24)
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(requestLogTimestamp(for: record.createdAt))
-                                            .font(.subheadline.weight(.semibold))
-                                            .foregroundStyle(.primary)
-
-                                        Text("\(record.operation.displayName) · \(record.model)")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-
-                                    Spacer(minLength: 0)
-
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding(.vertical, 12)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-
-                            if index < requestLogs.count - 1 {
-                                Divider()
-                                    .padding(.leading, 36)
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        RequestLogsSectionView(
+            requestLogs: requestLogs,
+            onSelectLog: { selectedRequestLog = $0 },
+            onClearLogs: clearRequestLogs,
+            timestampText: requestLogTimestamp(for:),
+            subtitleText: requestLogSubtitle(for:)
+        )
     }
 
     private func presentTestFailure(_ message: String, config: AIProviderRuntimeConfig) {
+        persistTestStatus(isSuccess: false)
         let resolvedBaseURL = config.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedModel = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
         testResult = AIProviderConfigTestResult(
@@ -657,6 +666,36 @@ private struct AIProviderConfigView: View {
 
     private func requestLogTimestamp(for date: Date) -> String {
         RequestLogDateFormatter.timestamp.string(from: date)
+    }
+
+    private func requestLogSubtitle(for record: AIProviderRequestLogEntry) -> String {
+        if let totalTokensText = record.totalTokensText {
+            return "\(record.operation.displayName) · \(record.model) · \(totalTokensText)"
+        }
+        return "\(record.operation.displayName) · \(record.model)"
+    }
+
+    private func persistTestStatus(isSuccess: Bool) {
+        let status = AIProviderConfigTestStatus(lastTestAt: .now, isSuccess: isSuccess)
+        AIProviderConfigTestStatusStore.persist(status, for: provider)
+        lastTestStatus = status
+    }
+
+    private func clearRequestLogs() {
+        AIProviderRequestLogStore.clear(provider: provider)
+        loadRequestLogs()
+    }
+
+    private func toggleAdvancedParameters() {
+        withAnimation {
+            isAdvancedParametersExpanded.toggle()
+        }
+    }
+
+    private func toggleRequestLogsVisibility() {
+        withAnimation {
+            isRequestLogsVisible.toggle()
+        }
     }
 
     private func sanitized(_ value: String, fallback: String) -> String {
@@ -692,6 +731,138 @@ private struct AIProviderConfigTestResult: Identifiable {
     let message: String
 }
 
+private struct RequestLogsSectionView: View {
+    let requestLogs: [AIProviderRequestLogEntry]
+    let onSelectLog: (AIProviderRequestLogEntry) -> Void
+    let onClearLogs: () -> Void
+    let timestampText: (Date) -> String
+    let subtitleText: (AIProviderRequestLogEntry) -> String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            RequestLogsHeaderView(
+                isClearEnabled: requestLogs.isEmpty == false,
+                onClearLogs: onClearLogs
+            )
+
+            GlassCard(cornerRadius: 18) {
+                if requestLogs.isEmpty {
+                    RequestLogsEmptyStateView()
+                } else {
+                    RequestLogsListView(
+                        requestLogs: requestLogs,
+                        onSelectLog: onSelectLog,
+                        timestampText: timestampText,
+                        subtitleText: subtitleText
+                    )
+                }
+            }
+        }
+    }
+}
+
+private struct RequestLogsHeaderView: View {
+    let isClearEnabled: Bool
+    let onClearLogs: () -> Void
+
+    @State private var isClearConfirmationPresented = false
+
+    var body: some View {
+        HStack {
+            Text(String(localized: "请求记录"))
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            Spacer(minLength: 0)
+
+            if isClearEnabled {
+                Button(action: presentClearConfirmation) {
+                    Label(String(localized: "清空"), systemImage: "trash")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.red)
+                .padding(.trailing, 20)
+                .alert(String(localized: "确认清空请求记录？"), isPresented: $isClearConfirmationPresented) {
+                    Button(String(localized: "取消"), role: .cancel) {}
+                    Button(String(localized: "清空"), role: .destructive, action: onClearLogs)
+                } message: {
+                    Text(String(localized: "清空后无法恢复。"))
+                }
+            }
+        }
+    }
+
+    private func presentClearConfirmation() {
+        guard isClearEnabled else { return }
+        isClearConfirmationPresented = true
+    }
+}
+
+private struct RequestLogsEmptyStateView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: "还没有请求记录"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+
+            Text(String(localized: "点击上方“测试配置”，或在首页触发 AI 摘要后，这里会展示每次请求的时间、结果和调试详情。"))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct RequestLogsListView: View {
+    let requestLogs: [AIProviderRequestLogEntry]
+    let onSelectLog: (AIProviderRequestLogEntry) -> Void
+    let timestampText: (Date) -> String
+    let subtitleText: (AIProviderRequestLogEntry) -> String
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(requestLogs.indices, id: \.self) { index in
+                let record = requestLogs[index]
+                Button {
+                    onSelectLog(record)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: record.isSuccess ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(record.isSuccess ? .green : .red)
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(timestampText(record.createdAt))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+
+                            Text(subtitleText(record))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if index < requestLogs.count - 1 {
+                    Divider()
+                        .padding(.leading, 36)
+                }
+            }
+        }
+    }
+}
+
 private struct AIProviderRequestLogDetailView: View {
     let record: AIProviderRequestLogEntry
     @Environment(\.dismiss) private var dismiss
@@ -720,6 +891,12 @@ private struct AIProviderRequestLogDetailView: View {
                                     title: String(localized: "模型"),
                                     value: record.model
                                 )
+                                if let totalTokensText = record.totalTokensText {
+                                    detailRow(
+                                        title: String(localized: "Token 消耗"),
+                                        value: totalTokensText
+                                    )
+                                }
                                 detailRow(
                                     title: String(localized: "请求地址"),
                                     value: record.endpoint
