@@ -395,7 +395,6 @@ private struct AIProviderConfigView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: isAdvancedParametersExpanded)
         .animation(.easeInOut(duration: 0.22), value: isRequestLogsVisible)
     }
 
@@ -433,9 +432,11 @@ private struct AIProviderConfigView: View {
 
                     Spacer(minLength: 0)
 
-                    Image(systemName: isAdvancedParametersExpanded ? "chevron.down" : "chevron.right")
+                    Image(systemName: "chevron.down")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isAdvancedParametersExpanded ? 180 : 0))
+                        .animation(.easeInOut(duration: 0.2), value: isAdvancedParametersExpanded)
                 }
                 .contentShape(Rectangle())
             }
@@ -464,7 +465,8 @@ private struct AIProviderConfigView: View {
                     )
                     .keyboardType(.decimalPad)
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .transition(.opacity)
             }
         }
     }
@@ -687,7 +689,7 @@ private struct AIProviderConfigView: View {
     }
 
     private func toggleAdvancedParameters() {
-        withAnimation {
+        withAnimation(.easeInOut(duration: 0.2)) {
             isAdvancedParametersExpanded.toggle()
         }
     }

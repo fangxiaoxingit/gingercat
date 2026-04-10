@@ -418,16 +418,20 @@ struct HomeScannerView: View {
     }
 
     private var addMenuCluster: some View {
-        quickAddButton
-            .background(alignment: .center) {
-                addMenuActionButtonsLayout
-                    .frame(width: 220, height: 220)
-                    .allowsHitTesting(isAddMenuExpanded)
-            }
+        ZStack(alignment: .bottomTrailing) {
+            addMenuActionButtonsLayout
+                .frame(width: 220, height: 220, alignment: .bottomTrailing)
+                .allowsHitTesting(isAddMenuExpanded)
+                .zIndex(1)
+
+            quickAddButton
+                .zIndex(2)
+        }
+        .frame(width: 220, height: 220, alignment: .bottomTrailing)
     }
 
     private var addMenuActionButtonsLayout: some View {
-        ZStack {
+        ZStack(alignment: .bottomTrailing) {
             ForEach(QuickAddAction.allCases) { action in
                 let isVisible = revealedQuickAddActions.contains(action)
                 AddMenuActionButton(
@@ -436,7 +440,11 @@ struct HomeScannerView: View {
                 ) {
                     handleQuickAddAction(action)
                 }
-                .offset(x: isVisible ? action.offset.width : 0, y: isVisible ? action.offset.height : 0)
+                // 二级按钮与主按钮共用同一个中心点，避免视觉位置正确但命中区域仍落在主按钮 background 外侧。
+                .offset(
+                    x: (isVisible ? action.offset.width : 0) - 5,
+                    y: (isVisible ? action.offset.height : 0) - 5
+                )
                 .scaleEffect(isVisible ? 1 : 0.18, anchor: .center)
                 .opacity(isVisible ? 1 : 0)
                 .brightness(isVisible ? 0 : 0.05)
