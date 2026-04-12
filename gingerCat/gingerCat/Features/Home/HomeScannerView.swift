@@ -407,9 +407,17 @@ struct HomeScannerView: View {
                     .foregroundStyle(AppTheme.primary)
                     .lineLimit(2)
 
-                Text(item.timeText)
-                    .font(.subheadline)
-                    .foregroundStyle(pendingTodoSecondaryTextColor)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(item.timeText)
+                        .font(.subheadline)
+                        .foregroundStyle(pendingTodoSecondaryTextColor)
+
+                    if let remainingDaysText = item.remainingDaysText {
+                        Text(remainingDaysText)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.orange)
+                    }
+                }
             }
 
             Spacer(minLength: 0)
@@ -502,16 +510,24 @@ struct HomeScannerView: View {
     }
 
     private var pendingTodos: [PendingTodoItem] {
+        let now = Date()
         let todoRecords = records
             .filter { record in
-                record.needTodo ||
-                (record.resolvedIntent == .schedule && (record.eventDate ?? .distantPast) > .now)
+                let isTodo = record.needTodo || record.resolvedIntent == .schedule
+                guard isTodo else {
+                    return false
+                }
+
+                if let eventDate = record.eventDate {
+                    return eventDate > now
+                }
+                return true
             }
             .sorted { lhs, rhs in
                 (lhs.eventDate ?? lhs.createdAt) < (rhs.eventDate ?? rhs.createdAt)
             }
         
-        return Array(todoRecords.prefix(3)).map { record in
+        return Array(todoRecords.prefix(5)).map { record in
             let title = record.eventTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
             let description = record.eventDescription?.trimmingCharacters(in: .whitespacesAndNewlines)
             let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -530,6 +546,7 @@ struct HomeScannerView: View {
                 id: record.id,
                 title: resolvedTitle,
                 timeText: pendingTimeText(for: record),
+                remainingDaysText: pendingRemainingDaysText(for: record),
                 record: record
             )
         }
@@ -540,6 +557,30 @@ struct HomeScannerView: View {
             return AppDateTimeFormatter.string(from: eventDate)
         }
         return AppDateTimeFormatter.string(from: record.createdAt)
+    }
+
+    private func pendingRemainingDaysText(for record: ScanRecord) -> String? {
+        guard let eventDate = record.eventDate else {
+            return nil
+        }
+
+        let now = Date()
+        guard eventDate > now else {
+            return nil
+        }
+
+        let calendar = Calendar.current
+        if calendar.isDate(eventDate, inSameDayAs: now) {
+            return String(localized: "今天到期")
+        }
+
+        let currentDay = calendar.startOfDay(for: now)
+        let eventDay = calendar.startOfDay(for: eventDate)
+        let dayDifference = calendar.dateComponents([.day], from: currentDay, to: eventDay).day ?? 0
+        if dayDifference <= 0 {
+            return String(localized: "今天到期")
+        }
+        return String(localized: "还剩 \(dayDifference) 天")
     }
 
     @MainActor
@@ -1256,6 +1297,7 @@ private struct PendingTodoItem: Identifiable {
     let id: UUID
     let title: String
     let timeText: String
+    let remainingDaysText: String?
     let record: ScanRecord
 }
 

@@ -263,6 +263,7 @@ private struct AIProviderConfigView: View {
     @State private var isRequestLogsVisible = false
     @State private var requestLogs: [AIProviderRequestLogEntry] = []
     @State private var selectedRequestLog: AIProviderRequestLogEntry?
+    @State private var isResetConfirmationPresented = false
 
     var body: some View {
         ZStack {
@@ -318,7 +319,7 @@ private struct AIProviderConfigView: View {
 
                     settingTextField(
                         title: String(localized: "Base URL"),
-                        placeholder: provider.defaultBaseURL,
+                        placeholder: provider.baseURLPlaceholder,
                         text: binding(for: .baseURL)
                     )
                     .textInputAutocapitalization(.never)
@@ -337,33 +338,63 @@ private struct AIProviderConfigView: View {
 
                     Divider()
 
-                    Button {
-                        selectedProviderRaw = provider.rawValue
-                        Task {
-                            await testCurrentConfig()
-                        }
-                    } label: {
-                        HStack(spacing: 10) {
-                            if isTestingConfig {
-                                ProgressView()
-                                    .controlSize(.small)
-                            } else {
-                                Image(systemName: "network")
+                    HStack(spacing: 10) {
+                        Button {
+                            isResetConfirmationPresented = true
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "arrow.counterclockwise")
                                     .font(.body.weight(.semibold))
+
+                                Text(String(localized: "重置"))
+                                    .font(.subheadline.weight(.semibold))
                             }
-
-                            Text(isTestingConfig ? String(localized: "测试中...") : String(localized: "测试配置"))
-                                .font(.subheadline.weight(.semibold))
-
-                            Spacer(minLength: 0)
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .foregroundStyle(.primary)
+                            .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .foregroundStyle(.white)
-                        .background(AppTheme.primary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .buttonStyle(.plain)
+                        .disabled(isTestingConfig)
+                        .alert(String(localized: "确认重置配置"), isPresented: $isResetConfirmationPresented) {
+                            Button(String(localized: "取消"), role: .cancel) {}
+                            Button(String(localized: "确认重置"), role: .destructive) {
+                                resetCurrentConfig()
+                            }
+                        } message: {
+                            Text(String(localized: "将恢复默认 Base URL 和模型，并清除 API Key 以及已填写的可选参数。"))
+                        }
+
+                        Button {
+                            selectedProviderRaw = provider.rawValue
+                            Task {
+                                await testCurrentConfig()
+                            }
+                        } label: {
+                            HStack(spacing: 10) {
+                                if isTestingConfig {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                } else {
+                                    Image(systemName: "network")
+                                        .font(.body.weight(.semibold))
+                                }
+
+                                Text(isTestingConfig ? String(localized: "测试中...") : String(localized: "测试配置"))
+                                    .font(.subheadline.weight(.semibold))
+
+                                Spacer(minLength: 0)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .foregroundStyle(.white)
+                            .background(AppTheme.primary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isTestingConfig)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isTestingConfig)
 
                     if let lastTestStatus {
                         HStack(alignment: .top, spacing: 8) {
@@ -473,16 +504,16 @@ private struct AIProviderConfigView: View {
 
     private var providerGuidanceText: String? {
         switch provider {
-        case .doubao:
-            return String(localized: "官方 OpenAI 兼容接入地址为 https://ark.cn-beijing.volces.com/api/v3，当前先支持 doubao-seed-2-0-lite-260215、doubao-seed-2-0-mini-260215、doubao-seed-2-0-pro-260215。")
         case .deepSeek:
             return String(localized: "推荐模型：deepseek-chat、deepseek-reasoner。若使用 deepseek-reasoner，temperature 与 top_p 往往会被忽略。")
+        case .kimi:
+            return nil
         case .miniMax:
             return String(localized: "推荐使用 OpenAI 兼容接口。默认地址为 https://api.minimaxi.com/v1，推荐模型可按场景选择标准版或 highspeed 版本。")
         case .xiaomiMiMo:
             return String(localized: "官方 OpenAI 兼容地址为 https://api.xiaomimimo.com/v1，常用模型为 mimo-v2-pro；多模态场景可尝试 mimo-v2-omni。")
-        case .kimi:
-            return nil
+        case .thirdParty:
+            return String(localized: "OpenAI 原生接口默认地址为 https://api.openai.com/v1，支持直接填写官方模型与 API Key。")
         }
     }
 
@@ -490,29 +521,31 @@ private struct AIProviderConfigView: View {
         VStack(alignment: .leading, spacing: 8) {
             settingTextField(
                 title: String(localized: "Model"),
-                placeholder: provider.defaultModel,
+                placeholder: provider.modelPlaceholder,
                 text: binding(for: .modelID)
             )
             .textInputAutocapitalization(.never)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(provider.recommendedModels, id: \.self) { model in
-                        Button {
-                            modelID = model
-                            persistCurrentConfig()
-                        } label: {
-                            Text(model)
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 8)
-                                .background(
-                                    (modelID == model ? AppTheme.primary.opacity(0.18) : Color(uiColor: .tertiarySystemBackground)),
-                                    in: Capsule()
-                                )
-                                .foregroundStyle(modelID == model ? AppTheme.primary : .secondary)
+            if provider.recommendedModels.isEmpty == false {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(provider.recommendedModels, id: \.self) { model in
+                            Button {
+                                modelID = model
+                                persistCurrentConfig()
+                            } label: {
+                                Text(model)
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        (modelID == model ? AppTheme.primary.opacity(0.18) : Color(uiColor: .tertiarySystemBackground)),
+                                        in: Capsule()
+                                    )
+                                    .foregroundStyle(modelID == model ? AppTheme.primary : .secondary)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -577,6 +610,18 @@ private struct AIProviderConfigView: View {
 
     private func persistCurrentConfig() {
         AIProviderConfigStore.persist(runtimeConfig)
+    }
+
+    private func resetCurrentConfig() {
+        baseURL = provider.defaultBaseURL
+        modelID = provider.defaultModel
+        apiKey = ""
+        maxTokens = ""
+        temperature = ""
+        topP = ""
+        persistCurrentConfig()
+        loadTestStatus()
+        loadRequestLogs()
     }
 
     private var runtimeConfig: AIProviderRuntimeConfig {

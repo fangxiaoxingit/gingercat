@@ -8,86 +8,80 @@ enum AppSettingsKeys {
 }
 
 enum AIProvider: String, CaseIterable, Identifiable {
-    case kimi
-    case doubao
     case deepSeek = "deepseek"
+    case kimi
     case miniMax = "minimax"
     case xiaomiMiMo = "xiaomi-mimo"
+    case thirdParty = "third-party"
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .kimi:
-            return "Kimi"
-        case .doubao:
-            return "Doubao"
         case .deepSeek:
             return "DeepSeek"
+        case .kimi:
+            return "Kimi"
         case .miniMax:
             return "MiniMax"
         case .xiaomiMiMo:
-            return "Xiaomi MiMo"
+            return "XiaoMi MiMo"
+        case .thirdParty:
+            return "OpenAI"
         }
     }
 
     var detailText: String {
         switch self {
-        case .kimi:
-            return String(localized: "Moonshot AI · OpenAI 兼容接口")
-        case .doubao:
-            return String(localized: "火山方舟 · OpenAI 兼容接口")
         case .deepSeek:
             return String(localized: "深度求索 · OpenAI 兼容接口")
+        case .kimi:
+            return String(localized: "Moonshot AI · OpenAI 兼容接口")
         case .miniMax:
             return String(localized: "MiniMax · OpenAI 兼容接口")
         case .xiaomiMiMo:
             return String(localized: "小米 MiMo · OpenAI 兼容接口")
+        case .thirdParty:
+            return String(localized: "OpenAI · 原生接口")
         }
     }
 
     var defaultBaseURL: String {
         switch self {
-        case .kimi:
-            return "https://api.moonshot.cn/v1"
-        case .doubao:
-            return "https://ark.cn-beijing.volces.com/api/v3"
         case .deepSeek:
             return "https://api.deepseek.com"
+        case .kimi:
+            return "https://api.moonshot.cn/v1"
         case .miniMax:
             return "https://api.minimaxi.com/v1"
         case .xiaomiMiMo:
             return "https://api.xiaomimimo.com/v1"
+        case .thirdParty:
+            return "https://api.openai.com/v1"
         }
     }
 
     var defaultModel: String {
         switch self {
-        case .kimi:
-            return "kimi-k2.5"
-        case .doubao:
-            return "doubao-seed-2-0-lite-260215"
         case .deepSeek:
             return "deepseek-chat"
+        case .kimi:
+            return "kimi-k2.5"
         case .miniMax:
             return "MiniMax-M2.7"
         case .xiaomiMiMo:
             return "mimo-v2-pro"
+        case .thirdParty:
+            return "gpt-5.4"
         }
     }
 
     var recommendedModels: [String] {
         switch self {
-        case .kimi:
-            return ["kimi-k2.5"]
-        case .doubao:
-            return [
-                "doubao-seed-2-0-lite-260215",
-                "doubao-seed-2-0-mini-260215",
-                "doubao-seed-2-0-pro-260215"
-            ]
         case .deepSeek:
             return ["deepseek-chat", "deepseek-reasoner"]
+        case .kimi:
+            return ["kimi-k2.5"]
         case .miniMax:
             return [
                 "MiniMax-M2.7",
@@ -97,29 +91,31 @@ enum AIProvider: String, CaseIterable, Identifiable {
             ]
         case .xiaomiMiMo:
             return ["mimo-v2-pro", "mimo-v2-omni"]
+        case .thirdParty:
+            return ["gpt-5.4", "gpt-5.4-mini", "gpt-4.1"]
         }
     }
 
     var supportsJSONOutput: Bool {
         switch self {
-        case .kimi, .deepSeek:
+        case .deepSeek, .kimi, .thirdParty:
             return true
-        case .doubao, .miniMax, .xiaomiMiMo:
+        case .miniMax, .xiaomiMiMo:
             return false
         }
     }
 
     func allowsTemperature(for model: String) -> Bool {
         switch self {
-        case .kimi:
-            return true
-        case .doubao:
-            return true
         case .deepSeek:
             return model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "deepseek-reasoner"
+        case .kimi:
+            return true
         case .miniMax:
             return true
         case .xiaomiMiMo:
+            return true
+        case .thirdParty:
             return true
         }
     }
@@ -132,9 +128,19 @@ enum AIProvider: String, CaseIterable, Identifiable {
         switch self {
         case .xiaomiMiMo:
             return "max_completion_tokens"
-        case .kimi, .doubao, .deepSeek, .miniMax:
+        case .deepSeek, .kimi, .miniMax, .thirdParty:
             return "max_tokens"
         }
+    }
+
+    var baseURLPlaceholder: String {
+        let trimmed = defaultBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? String(localized: "请填写 Base URL") : trimmed
+    }
+
+    var modelPlaceholder: String {
+        let trimmed = defaultModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? String(localized: "请填写模型名称") : trimmed
     }
 }
 
@@ -143,91 +149,91 @@ enum AIProviderSettingsKeys {
 
     static func baseURL(for provider: AIProvider) -> String {
         switch provider {
-        case .kimi:
-            return "settings.kimi.baseURL"
-        case .doubao:
-            return "settings.doubao.baseURL"
         case .deepSeek:
             return "settings.deepseek.baseURL"
+        case .kimi:
+            return "settings.kimi.baseURL"
         case .miniMax:
             return "settings.minimax.baseURL"
         case .xiaomiMiMo:
             return "settings.xiaomimimo.baseURL"
+        case .thirdParty:
+            return "settings.thirdparty.baseURL"
         }
     }
 
     static func model(for provider: AIProvider) -> String {
         switch provider {
-        case .kimi:
-            return "settings.kimi.model"
-        case .doubao:
-            return "settings.doubao.model"
         case .deepSeek:
             return "settings.deepseek.model"
+        case .kimi:
+            return "settings.kimi.model"
         case .miniMax:
             return "settings.minimax.model"
         case .xiaomiMiMo:
             return "settings.xiaomimimo.model"
+        case .thirdParty:
+            return "settings.thirdparty.model"
         }
     }
 
     static func apiKey(for provider: AIProvider) -> String {
         switch provider {
-        case .kimi:
-            return "settings.kimi.apiKey"
-        case .doubao:
-            return "settings.doubao.apiKey"
         case .deepSeek:
             return "settings.deepseek.apiKey"
+        case .kimi:
+            return "settings.kimi.apiKey"
         case .miniMax:
             return "settings.minimax.apiKey"
         case .xiaomiMiMo:
             return "settings.xiaomimimo.apiKey"
+        case .thirdParty:
+            return "settings.thirdparty.apiKey"
         }
     }
 
     static func maxTokens(for provider: AIProvider) -> String {
         switch provider {
-        case .kimi:
-            return "settings.kimi.maxTokens"
-        case .doubao:
-            return "settings.doubao.maxTokens"
         case .deepSeek:
             return "settings.deepseek.maxTokens"
+        case .kimi:
+            return "settings.kimi.maxTokens"
         case .miniMax:
             return "settings.minimax.maxTokens"
         case .xiaomiMiMo:
             return "settings.xiaomimimo.maxTokens"
+        case .thirdParty:
+            return "settings.thirdparty.maxTokens"
         }
     }
 
     static func temperature(for provider: AIProvider) -> String {
         switch provider {
-        case .kimi:
-            return "settings.kimi.temperature"
-        case .doubao:
-            return "settings.doubao.temperature"
         case .deepSeek:
             return "settings.deepseek.temperature"
+        case .kimi:
+            return "settings.kimi.temperature"
         case .miniMax:
             return "settings.minimax.temperature"
         case .xiaomiMiMo:
             return "settings.xiaomimimo.temperature"
+        case .thirdParty:
+            return "settings.thirdparty.temperature"
         }
     }
 
     static func topP(for provider: AIProvider) -> String {
         switch provider {
-        case .kimi:
-            return "settings.kimi.topP"
-        case .doubao:
-            return "settings.doubao.topP"
         case .deepSeek:
             return "settings.deepseek.topP"
+        case .kimi:
+            return "settings.kimi.topP"
         case .miniMax:
             return "settings.minimax.topP"
         case .xiaomiMiMo:
             return "settings.xiaomimimo.topP"
+        case .thirdParty:
+            return "settings.thirdparty.topP"
         }
     }
 }
