@@ -5,5 +5,7 @@ import WidgetKit
 struct gingerCatLiveActivityWidgetBundle: WidgetBundle {
     var body: some Widget {
         OCRLiveActivityWidget()
+        LatestTodoSquareWidget()
+        RecentTodosMediumWidget()
     }
 }

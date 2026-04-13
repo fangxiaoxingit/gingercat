@@ -149,6 +149,7 @@ struct HomeScannerView: View {
                 openPendingNotificationRecordIfNeeded()
                 consumePendingExternalImportIfNeeded()
                 consumeLatestExternalImportErrorIfNeeded()
+                syncTodoWidgetSnapshot()
             }
             .onReceive(recordNavigationCenter.$pendingRecordID) { _ in
                 openPendingNotificationRecordIfNeeded()
@@ -156,12 +157,16 @@ struct HomeScannerView: View {
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active else { return }
                 openPendingNotificationRecordIfNeeded()
+                syncTodoWidgetSnapshot()
             }
             .onChange(of: externalImportCenter.pendingImport?.id) { _, _ in
                 consumePendingExternalImportIfNeeded()
             }
             .onChange(of: externalImportCenter.latestErrorMessage) { _, _ in
                 consumeLatestExternalImportErrorIfNeeded()
+            }
+            .onChange(of: todoWidgetSyncSignatures) { _, _ in
+                syncTodoWidgetSnapshot()
             }
             .alert(item: $activeAlert) { alert in
                 Alert(
@@ -507,6 +512,30 @@ struct HomeScannerView: View {
 
     private var pendingTodoSecondaryTextColor: Color {
         colorScheme == .dark ? Color.white.opacity(0.72) : Color.black.opacity(0.58)
+    }
+
+    private var todoWidgetSyncSignatures: [TodoWidgetSyncSignature] {
+        records.map { record in
+            TodoWidgetSyncSignature(
+                id: record.id,
+                needTodo: record.needTodo,
+                resolvedIntent: record.resolvedIntent.rawValue,
+                eventDate: record.eventDate,
+                hasAddedTodoReminder: record.hasAddedTodoReminder,
+                todoEventsJSON: record.todoEventsJSON,
+                addedTodoEventKeysJSON: record.addedTodoEventKeysJSON,
+                summaryUpdatedAt: record.summaryUpdatedAt,
+                eventTitle: record.eventTitle ?? "",
+                eventDescription: record.eventDescription ?? "",
+                summaryPrefix: String(record.summary.prefix(80)),
+                recognizedTextPrefix: String(record.recognizedText.prefix(80)),
+                imageDataCount: record.imageData?.count ?? 0
+            )
+        }
+    }
+
+    private func syncTodoWidgetSnapshot() {
+        TodoWidgetSnapshotSync.sync(records: records)
     }
 
     private var pendingTodos: [PendingTodoItem] {
@@ -1817,6 +1846,22 @@ private struct HomeCollageButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 1.04 : 1.0)
             .animation(.spring(response: 0.18, dampingFraction: 0.82), value: configuration.isPressed)
     }
+}
+
+private struct TodoWidgetSyncSignature: Equatable {
+    let id: UUID
+    let needTodo: Bool
+    let resolvedIntent: String
+    let eventDate: Date?
+    let hasAddedTodoReminder: Bool
+    let todoEventsJSON: String
+    let addedTodoEventKeysJSON: String
+    let summaryUpdatedAt: Date?
+    let eventTitle: String
+    let eventDescription: String
+    let summaryPrefix: String
+    let recognizedTextPrefix: String
+    let imageDataCount: Int
 }
 
 private struct RecordDetailRoute: Hashable, Identifiable {
