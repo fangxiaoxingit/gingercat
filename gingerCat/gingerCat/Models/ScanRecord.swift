@@ -28,6 +28,8 @@ final class ScanRecord {
     var usedAISummary: Bool = false
     var ocrLineBoxesJSON: String = ""
     var hasAddedTodoReminder: Bool = false
+    var todoEventsJSON: String = ""
+    var addedTodoEventKeysJSON: String = ""
 
     init(
         id: UUID = UUID(),
@@ -49,7 +51,9 @@ final class ScanRecord {
         isOCRCompleted: Bool = false,
         usedAISummary: Bool = false,
         ocrLineBoxesJSON: String = "",
-        hasAddedTodoReminder: Bool = false
+        hasAddedTodoReminder: Bool = false,
+        todoEventsJSON: String = "",
+        addedTodoEventKeysJSON: String = ""
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -71,6 +75,8 @@ final class ScanRecord {
         self.usedAISummary = usedAISummary
         self.ocrLineBoxesJSON = ocrLineBoxesJSON
         self.hasAddedTodoReminder = hasAddedTodoReminder
+        self.todoEventsJSON = todoEventsJSON
+        self.addedTodoEventKeysJSON = addedTodoEventKeysJSON
     }
 
     var resolvedIntent: ScanIntent {
@@ -102,6 +108,55 @@ extension ScanRecord {
             }
             ocrLineBoxesJSON = value
         }
+    }
+
+    var todoEvents: [ScanTodoEvent] {
+        get {
+            guard let data = todoEventsJSON.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([ScanTodoEvent].self, from: data) else {
+                return []
+            }
+            return decoded
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue),
+                  let value = String(data: data, encoding: .utf8) else {
+                todoEventsJSON = ""
+                return
+            }
+            todoEventsJSON = value
+        }
+    }
+
+    var addedTodoEventKeys: Set<String> {
+        get {
+            guard let data = addedTodoEventKeysJSON.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+                return []
+            }
+            return Set(decoded)
+        }
+        set {
+            let values = Array(newValue)
+            guard let data = try? JSONEncoder().encode(values),
+                  let value = String(data: data, encoding: .utf8) else {
+                addedTodoEventKeysJSON = ""
+                return
+            }
+            addedTodoEventKeysJSON = value
+        }
+    }
+
+    static func todoEventKey(date: Date, title: String?, description: String?) -> String {
+        let timestamp = Int(date.timeIntervalSince1970.rounded())
+        let normalizedTitle = (title ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let normalizedDescription = (description ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let briefDescription = String(normalizedDescription.prefix(40))
+        return "\(timestamp)|\(normalizedTitle)|\(briefDescription)"
     }
 
     static func previewData() -> [ScanRecord] {
@@ -149,5 +204,18 @@ enum AppDateTimeFormatter {
 
     static func string(from date: Date) -> String {
         shared.string(from: date)
+    }
+}
+
+struct ScanTodoEvent: Codable, Hashable {
+    var title: String?
+    var date: Date
+    var time: String?
+    var keywords: [String]
+    var description: String?
+    var needTodo: Bool
+
+    var key: String {
+        ScanRecord.todoEventKey(date: date, title: title, description: description)
     }
 }

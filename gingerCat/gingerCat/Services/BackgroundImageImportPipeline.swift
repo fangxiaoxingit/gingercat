@@ -20,6 +20,7 @@ private struct BackgroundOCRPipelineResult {
     let aiFallbackMessage: String?
     let didAISummaryRequestFail: Bool
     let summaryModelName: String?
+    let todoEvents: [ScanTodoEvent]
 }
 
 @MainActor
@@ -95,7 +96,8 @@ enum BackgroundImageImportPipeline {
                 lineBoxes: [],
                 aiFallbackMessage: nil,
                 didAISummaryRequestFail: false,
-                summaryModelName: nil
+                summaryModelName: nil,
+                todoEvents: []
             )
         }
         #else
@@ -114,7 +116,8 @@ enum BackgroundImageImportPipeline {
             lineBoxes: [],
             aiFallbackMessage: nil,
             didAISummaryRequestFail: false,
-            summaryModelName: nil
+            summaryModelName: nil,
+            todoEvents: []
         )
         #endif
 
@@ -175,7 +178,8 @@ enum BackgroundImageImportPipeline {
                 lineBoxes: [],
                 aiFallbackMessage: nil,
                 didAISummaryRequestFail: false,
-                summaryModelName: nil
+                summaryModelName: nil,
+                todoEvents: []
             )
         } catch VisionOCRServiceError.invalidImage {
             return BackgroundOCRPipelineResult(
@@ -193,7 +197,8 @@ enum BackgroundImageImportPipeline {
                 lineBoxes: [],
                 aiFallbackMessage: nil,
                 didAISummaryRequestFail: false,
-                summaryModelName: nil
+                summaryModelName: nil,
+                todoEvents: []
             )
         } catch {
             return BackgroundOCRPipelineResult(
@@ -211,7 +216,8 @@ enum BackgroundImageImportPipeline {
                 lineBoxes: [],
                 aiFallbackMessage: nil,
                 didAISummaryRequestFail: false,
-                summaryModelName: nil
+                summaryModelName: nil,
+                todoEvents: []
             )
         }
     }
@@ -230,6 +236,13 @@ enum BackgroundImageImportPipeline {
         record.eventKeywordsText = result.eventKeywords.joined(separator: ",")
         record.eventDescription = result.eventDescription
         record.needTodo = result.needTodo
+        record.todoEvents = result.todoEvents
+        if result.todoEvents.isEmpty == false {
+            let validKeys = Set(result.todoEvents.map(\.key))
+            let retainedKeys = record.addedTodoEventKeys.intersection(validKeys)
+            record.addedTodoEventKeys = retainedKeys
+            record.hasAddedTodoReminder = retainedKeys.isEmpty == false
+        }
         record.isOCRCompleted = result.isOCRCompleted
         record.usedAISummary = result.usedAISummary
         record.summaryUpdatedAt = result.isOCRCompleted ? .now : record.summaryUpdatedAt
@@ -250,20 +263,24 @@ enum BackgroundImageImportPipeline {
         let resolvedSummary = insight.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? ocrFallbackText
             : insight.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedTitle = insight.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedDescription = insight.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let todoEvents = buildTodoEvents(from: insight)
+        let primaryTodoEvent = todoEvents.first(where: { $0.needTodo }) ?? todoEvents.first
+        let resolvedTitle = primaryTodoEvent?.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? insight.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedDescription = primaryTodoEvent?.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? insight.description?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let normalizedKeywords = Array(
-            insight.keywords
+            (primaryTodoEvent?.keywords ?? insight.keywords)
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { $0.isEmpty == false }
                 .prefix(3)
         )
-        let normalizedTimeValue = normalizedTime(insight.time)
+        let normalizedTimeValue = primaryTodoEvent?.time ?? normalizedTime(insight.time)
         let resolvedEventTime = normalizedTimeValue ?? "00:00"
-        let date = parsedEventDate(date: insight.date, time: resolvedEventTime)
+        let date = primaryTodoEvent?.date ?? parsedEventDate(date: insight.date, time: resolvedEventTime)
         let hasScheduleDate = date != nil
-        let todo = insight.needTodo
+        let todo = primaryTodoEvent?.needTodo ?? insight.needTodo
         let descriptionText = (resolvedDescription?.isEmpty == false) ? resolvedDescription : resolvedSummary
 
         return BackgroundOCRPipelineResult(
@@ -281,7 +298,8 @@ enum BackgroundImageImportPipeline {
             lineBoxes: lineBoxes,
             aiFallbackMessage: nil,
             didAISummaryRequestFail: false,
-            summaryModelName: summaryModelName
+            summaryModelName: summaryModelName,
+            todoEvents: todoEvents
         )
     }
 
@@ -310,8 +328,37 @@ enum BackgroundImageImportPipeline {
             lineBoxes: lineBoxes,
             aiFallbackMessage: aiFallbackMessage,
             didAISummaryRequestFail: didAISummaryRequestFail,
-            summaryModelName: summaryModelName
+            summaryModelName: summaryModelName,
+            todoEvents: []
         )
+    }
+
+    private static func buildTodoEvents(from insight: AIOCRInsight) -> [ScanTodoEvent] {
+        insight.events.compactMap { event in
+            let normalizedTimeValue = normalizedTime(event.time) ?? "00:00"
+            guard let date = parsedEventDate(date: event.date, time: normalizedTimeValue) else {
+                return nil
+            }
+            let title = event.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let description = event.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let keywords = Array(
+                event.keywords
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { $0.isEmpty == false }
+                    .prefix(3)
+            )
+            return ScanTodoEvent(
+                title: title,
+                date: date,
+                time: normalizedTimeValue,
+                keywords: keywords,
+                description: description,
+                needTodo: event.needTodo
+            )
+        }
+        .sorted { lhs, rhs in
+            lhs.date < rhs.date
+        }
     }
 
     private static func parsedEventDate(date: String?, time: String) -> Date? {

@@ -23,6 +23,7 @@ struct ArchiveDetailView: View {
     @State private var reminderDraft = ReminderDraft.empty
     @State private var isDeleteConfirmationPresented = false
     @State private var showRepeatTodoHintInEditor = false
+    @State private var selectedReminderEventKey: String?
     @State private var toastMessage: String?
     @State private var toastDismissTask: Task<Void, Never>?
 
@@ -118,6 +119,7 @@ struct ArchiveDetailView: View {
                 onCancel: {
                     isReminderEditorPresented = false
                     showRepeatTodoHintInEditor = false
+                    selectedReminderEventKey = nil
                 },
                 onSave: {
                     Task {
@@ -234,15 +236,66 @@ struct ArchiveDetailView: View {
     }
 
     private var mergedRecordCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if shouldShowSummaryOverviewCard {
+                summaryOverviewCard
+            }
+
+            ForEach(Array(recordInfoModules.enumerated()), id: \.element.id) { index, module in
+                recordInfoModuleCard(module: module, index: index)
+            }
+        }
+    }
+
+    private var summaryOverviewCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .center, spacing: 12) {
-                    Label(String(localized: "记录信息"), systemImage: "text.quote")
+                    Label(String(localized: "总体摘要"), systemImage: "doc.text.magnifyingglass")
                         .font(.headline)
 
                     Spacer(minLength: 0)
 
-                    if record.hasAddedTodoReminder {
+                    Text(String(localized: "待办 \(pendingTodoCount)/\(reminderModuleCount)"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color.orange.opacity(0.15), in: Capsule())
+                }
+
+                Divider()
+
+                Text(summaryOverviewText)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    private func recordInfoModuleCard(module: RecordInfoModule, index: Int) -> some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 12) {
+                    Label(moduleTitle(at: index), systemImage: "text.quote")
+                        .font(.headline)
+
+                    Spacer(minLength: 0)
+
+                    if shouldShowInlineAddTodoButton(for: module) {
+                        Button {
+                            presentReminderEditor(for: module)
+                        } label: {
+                            Label(String(localized: "加入待办"), systemImage: "checklist")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.mini)
+                        .tint(AppTheme.primary)
+                    } else if isReminderAdded(for: module) {
                         Label(String(localized: "已添加"), systemImage: "checkmark.circle.fill")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(AppTheme.primary)
@@ -253,40 +306,39 @@ struct ArchiveDetailView: View {
 
                 detailField(
                     title: String(localized: "标题"),
-                    content: resolvedTitle
+                    content: module.title
                 )
 
                 detailField(
                     title: String(localized: "详细内容"),
-                    content: resolvedDetailText
+                    content: module.detail
                 )
 
                 detailField(
                     title: String(localized: "关键词"),
-                    content: resolvedKeywords
-                )
-
-                detailField(
-                    title: String(localized: "创建时间"),
-                    content: AppDateTimeFormatter.string(from: record.createdAt)
-                )
-
-                detailField(
-                    title: String(localized: "摘要更新时间"),
-                    content: summaryUpdatedTimeText
+                    content: module.keywordsText
                 )
 
                 detailField(
                     title: String(localized: "待办提醒时间"),
-                    content: reminderDueTimeText
+                    content: module.dueDateText
                 )
 
-                detailField(
-                    title: String(localized: "待办事项"),
-                    content: todoReminderStatusText
-                )
+                Divider()
+
+                recordMetaFootnote
             }
         }
+    }
+
+    private var recordMetaFootnote: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(String(localized: "创建时间：\(AppDateTimeFormatter.string(from: record.createdAt))"))
+            Text(String(localized: "摘要更新时间：\(summaryUpdatedTimeText)"))
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var noteCard: some View {
@@ -329,10 +381,18 @@ struct ArchiveDetailView: View {
                 notes: reminderDraft.notes,
                 dueDate: reminderDraft.hasDueDate ? reminderDraft.dueDate : nil
             )
-            record.hasAddedTodoReminder = true
+            if let selectedReminderEventKey {
+                var addedKeys = record.addedTodoEventKeys
+                addedKeys.insert(selectedReminderEventKey)
+                record.addedTodoEventKeys = addedKeys
+                record.hasAddedTodoReminder = addedKeys.isEmpty == false
+            } else {
+                record.hasAddedTodoReminder = true
+            }
             try? modelContext.save()
             isReminderEditorPresented = false
             showRepeatTodoHintInEditor = false
+            selectedReminderEventKey = nil
             reminderFeedback = ReminderFeedback(
                 title: String(localized: "添加成功"),
                 message: String(localized: "已加入系统提醒事项，你可以前往提醒事项 App 查看。")
@@ -379,13 +439,15 @@ struct ArchiveDetailView: View {
         }
     }
 
-    private func presentReminderEditor() {
-        showRepeatTodoHintInEditor = record.hasAddedTodoReminder
-        openReminderEditor()
+    private func presentReminderEditor(for module: RecordInfoModule? = nil) {
+        let resolvedModule = module ?? firstCandidateModuleForReminder
+        selectedReminderEventKey = resolvedModule?.reminderKey
+        showRepeatTodoHintInEditor = resolvedModule.map(isReminderAdded(for:)) ?? record.hasAddedTodoReminder
+        openReminderEditor(for: resolvedModule)
     }
 
-    private func openReminderEditor() {
-        reminderDraft = ReminderDraft(record: record)
+    private func openReminderEditor(for module: RecordInfoModule?) {
+        reminderDraft = ReminderDraft(record: record, module: module)
         isReminderEditorPresented = true
     }
 
@@ -496,6 +558,9 @@ struct ArchiveDetailView: View {
         record.eventKeywordsText = ""
         record.eventDescription = payload.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : payload.rawText
         record.needTodo = false
+        record.todoEvents = []
+        record.addedTodoEventKeys = []
+        record.hasAddedTodoReminder = false
         record.isOCRCompleted = true
         record.usedAISummary = false
         record.summaryUpdatedAt = .now
@@ -513,19 +578,23 @@ struct ArchiveDetailView: View {
         let resolvedSummary = insight.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? ocrFallbackText
             : insight.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedTitle = insight.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedDescription = insight.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let todoEvents = buildTodoEvents(from: insight)
+        let primaryTodoEvent = todoEvents.first(where: { $0.needTodo }) ?? todoEvents.first
+        let resolvedTitle = primaryTodoEvent?.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? insight.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedDescription = primaryTodoEvent?.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? insight.description?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedKeywords = Array(
-            insight.keywords
+            (primaryTodoEvent?.keywords ?? insight.keywords)
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { $0.isEmpty == false }
                 .prefix(3)
         )
-        let normalizedTimeValue = normalizedTime(insight.time)
+        let normalizedTimeValue = primaryTodoEvent?.time ?? normalizedTime(insight.time)
         let resolvedEventTime = normalizedTimeValue ?? "00:00"
-        let date = parsedEventDate(date: insight.date, time: resolvedEventTime)
+        let date = primaryTodoEvent?.date ?? parsedEventDate(date: insight.date, time: resolvedEventTime)
         let hasScheduleDate = date != nil
-        let needTodo = insight.needTodo
+        let needTodo = primaryTodoEvent?.needTodo ?? insight.needTodo
         let descriptionText = (resolvedDescription?.isEmpty == false) ? resolvedDescription : resolvedSummary
 
         record.recognizedText = recognizedText
@@ -538,11 +607,49 @@ struct ArchiveDetailView: View {
         record.eventKeywordsText = normalizedKeywords.joined(separator: ",")
         record.eventDescription = descriptionText
         record.needTodo = needTodo
+        record.todoEvents = todoEvents
+        if todoEvents.isEmpty {
+            record.addedTodoEventKeys = []
+            record.hasAddedTodoReminder = false
+        } else {
+            let validKeys = Set(todoEvents.map(\.key))
+            let retainedKeys = record.addedTodoEventKeys.intersection(validKeys)
+            record.addedTodoEventKeys = retainedKeys
+            record.hasAddedTodoReminder = retainedKeys.isEmpty == false
+        }
         record.isOCRCompleted = true
         record.usedAISummary = true
         record.summaryUpdatedAt = .now
         record.summaryModelName = AIProviderConfigStore.selectedRuntimeConfig().summaryModelDisplayName
         try? modelContext.save()
+    }
+
+    private func buildTodoEvents(from insight: AIOCRInsight) -> [ScanTodoEvent] {
+        insight.events.compactMap { event in
+            let normalizedTimeValue = normalizedTime(event.time) ?? "00:00"
+            guard let date = parsedEventDate(date: event.date, time: normalizedTimeValue) else {
+                return nil
+            }
+            let title = event.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let description = event.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let keywords = Array(
+                event.keywords
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { $0.isEmpty == false }
+                    .prefix(3)
+            )
+            return ScanTodoEvent(
+                title: title,
+                date: date,
+                time: normalizedTimeValue,
+                keywords: keywords,
+                description: description,
+                needTodo: event.needTodo
+            )
+        }
+        .sorted { lhs, rhs in
+            lhs.date < rhs.date
+        }
     }
 
     private func ensureRecognitionForAI() async throws -> OCRRecognitionResult {
@@ -603,10 +710,86 @@ struct ArchiveDetailView: View {
         return keywords.isEmpty ? String(localized: "无") : keywords.joined(separator: " / ")
     }
 
-    private var todoReminderStatusText: String {
-        record.hasAddedTodoReminder
-            ? String(localized: "已添加")
-            : String(localized: "未添加")
+    private var recordInfoModules: [RecordInfoModule] {
+        let normalizedSummary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summaryFallback = normalizedSummary.isEmpty ? String(localized: "无") : normalizedSummary
+        let summaryTitleFallback = normalizedSummary.isEmpty ? String(localized: "无") : String(normalizedSummary.prefix(40))
+        let todoEvents = record.todoEvents.filter(\.needTodo).sorted { lhs, rhs in
+            lhs.date < rhs.date
+        }
+
+        if todoEvents.isEmpty == false {
+            return todoEvents.enumerated().map { index, event in
+                let title = (event.title ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let detail = (event.description ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return RecordInfoModule(
+                    id: "todo-\(index)-\(event.key)",
+                    reminderKey: event.key,
+                    title: title.isEmpty ? summaryTitleFallback : title,
+                    detail: detail.isEmpty ? summaryFallback : detail,
+                    keywords: event.keywords,
+                    dueDate: event.date,
+                    isTodoCandidate: true
+                )
+            }
+        }
+
+        let legacyReminderKey: String? = {
+            guard record.needTodo, let eventDate = record.eventDate else { return nil }
+            return ScanRecord.todoEventKey(
+                date: eventDate,
+                title: record.eventTitle,
+                description: record.eventDescription
+            )
+        }()
+
+        return [
+            RecordInfoModule(
+                id: "legacy-\(record.id.uuidString)",
+                reminderKey: legacyReminderKey,
+                title: resolvedTitle,
+                detail: resolvedDetailText,
+                keywords: record.eventKeywords,
+                dueDate: record.eventDate,
+                isTodoCandidate: record.needTodo
+            )
+        ]
+    }
+
+    private var reminderModules: [RecordInfoModule] {
+        recordInfoModules.filter { $0.isTodoCandidate && $0.reminderKey != nil }
+    }
+
+    private var shouldShowSummaryOverviewCard: Bool {
+        reminderModuleCount > 1
+    }
+
+    private var reminderModuleCount: Int {
+        reminderModules.count
+    }
+
+    private var pendingTodoCount: Int {
+        reminderModules.filter { shouldShowInlineAddTodoButton(for: $0) }.count
+    }
+
+    private var summaryOverviewText: String {
+        let text = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? resolvedDetailText : text
+    }
+
+    private var firstCandidateModuleForReminder: RecordInfoModule? {
+        reminderModules.first { shouldShowInlineAddTodoButton(for: $0) }
+            ?? reminderModules.first
+            ?? recordInfoModules.first
+    }
+
+    private func moduleTitle(at index: Int) -> String {
+        if recordInfoModules.count > 1 {
+            return String(localized: "记录信息 \(index + 1)")
+        }
+        return String(localized: "记录信息")
     }
 
     private var summaryUpdatedTimeText: String {
@@ -621,11 +804,32 @@ struct ArchiveDetailView: View {
         return "\(sourceName) · \(timestamp)"
     }
 
-    private var reminderDueTimeText: String {
-        guard let eventDate = record.eventDate else {
-            return String(localized: "无")
+    private func isReminderAdded(for module: RecordInfoModule) -> Bool {
+        if let key = module.reminderKey {
+            if record.addedTodoEventKeys.contains(key) {
+                return true
+            }
+            if reminderModules.count == 1,
+               record.addedTodoEventKeys.isEmpty,
+               record.hasAddedTodoReminder {
+                return true
+            }
+            return false
         }
-        return AppDateTimeFormatter.string(from: eventDate)
+        return record.hasAddedTodoReminder
+    }
+
+    private func shouldShowInlineAddTodoButton(for module: RecordInfoModule) -> Bool {
+        guard module.isTodoCandidate else {
+            return false
+        }
+        guard isReminderAdded(for: module) == false else {
+            return false
+        }
+        guard let dueDate = module.dueDate else {
+            return false
+        }
+        return dueDate > .now
     }
 
     private func detailField(title: String, content: String) -> some View {
@@ -786,6 +990,29 @@ private struct ReminderFeedback: Identifiable {
     let message: String
 }
 
+private struct RecordInfoModule: Identifiable, Hashable {
+    let id: String
+    let reminderKey: String?
+    let title: String
+    let detail: String
+    let keywords: [String]
+    let dueDate: Date?
+    let isTodoCandidate: Bool
+
+    var keywordsText: String {
+        keywords.isEmpty
+            ? String(localized: "无")
+            : keywords.joined(separator: " / ")
+    }
+
+    var dueDateText: String {
+        guard let dueDate else {
+            return String(localized: "无")
+        }
+        return AppDateTimeFormatter.string(from: dueDate)
+    }
+}
+
 private struct ReminderDraft {
     var title: String
     var notes: String
@@ -806,9 +1033,11 @@ private struct ReminderDraft {
         hasDueDate: true
     )
 
-    init(record: ScanRecord) {
+    init(record: ScanRecord, module: RecordInfoModule?) {
         let resolvedTitle: String
-        if let eventTitle = record.eventTitle?.trimmingCharacters(in: .whitespacesAndNewlines), eventTitle.isEmpty == false {
+        if let moduleTitle = module?.title.trimmingCharacters(in: .whitespacesAndNewlines), moduleTitle.isEmpty == false {
+            resolvedTitle = moduleTitle
+        } else if let eventTitle = record.eventTitle?.trimmingCharacters(in: .whitespacesAndNewlines), eventTitle.isEmpty == false {
             resolvedTitle = eventTitle
         } else {
             let fallback = (record.eventDescription ?? record.summary).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -820,20 +1049,23 @@ private struct ReminderDraft {
         if note.isEmpty == false {
             noteLines.append(note)
         }
-        if let description = record.eventDescription?.trimmingCharacters(in: .whitespacesAndNewlines), description.isEmpty == false {
+        if let moduleDescription = module?.detail.trimmingCharacters(in: .whitespacesAndNewlines), moduleDescription.isEmpty == false {
+            noteLines.append(String(localized: "事件描述：\(moduleDescription)"))
+        } else if let description = record.eventDescription?.trimmingCharacters(in: .whitespacesAndNewlines), description.isEmpty == false {
             noteLines.append(String(localized: "事件描述：\(description)"))
         } else {
             let label = record.usedAISummary ? String(localized: "摘要") : String(localized: "识别内容")
             noteLines.append("\(label)：\(record.summary)")
         }
-        if record.eventKeywords.isEmpty == false {
-            noteLines.append(String(localized: "关键词：\(record.eventKeywords.joined(separator: "、"))"))
+        let keywords = module?.keywords ?? record.eventKeywords
+        if keywords.isEmpty == false {
+            noteLines.append(String(localized: "关键词：\(keywords.joined(separator: "、"))"))
         }
 
         self.title = resolvedTitle
         self.notes = noteLines.joined(separator: "\n")
-        self.dueDate = record.eventDate ?? Calendar.current.date(byAdding: .hour, value: 1, to: .now) ?? .now
-        self.hasDueDate = record.eventDate != nil
+        self.dueDate = module?.dueDate ?? record.eventDate ?? Calendar.current.date(byAdding: .hour, value: 1, to: .now) ?? .now
+        self.hasDueDate = (module?.dueDate ?? record.eventDate) != nil
     }
 }
 

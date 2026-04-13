@@ -28,6 +28,16 @@ struct AIOCRInsight: Hashable {
     let keywords: [String]
     let description: String?
     let needTodo: Bool
+    let events: [AIOCREventInsight]
+}
+
+struct AIOCREventInsight: Hashable {
+    let date: String?
+    let time: String?
+    let title: String?
+    let keywords: [String]
+    let description: String?
+    let needTodo: Bool
 }
 
 enum AIProviderService {
@@ -63,6 +73,14 @@ enum AIProviderService {
         rawText: String,
         config: AIProviderRuntimeConfig
     ) async throws -> AIOCRInsight {
+        let normalizedRawText: String = {
+            let normalized = normalizedOCRTextForAI(rawText)
+            if normalized.isEmpty {
+                return rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            return normalized
+        }()
+        let nowContext = currentDateContext()
         let content = try await withTimeout(seconds: 20, provider: config.provider) {
             try await requestCompletionContent(
                 messages: [
@@ -74,13 +92,13 @@ enum AIProviderService {
                     ],
                     [
                         "role": "user",
-                        "content": userPrompt(rawText: rawText)
+                        "content": userPrompt(rawText: normalizedRawText, currentDateContext: nowContext)
                     ]
                 ],
                 config: config,
                 responseFormat: config.provider.supportsJSONOutput ? ["type": "json_object"] : nil,
                 operation: .ocrAnalysis,
-                requestLogDisplayText: rawText
+                requestLogDisplayText: normalizedRawText
             )
         }
         return try decodeInsight(from: content, provider: config.provider)
@@ -224,8 +242,28 @@ enum AIProviderService {
         }
 
         let decoded = try JSONDecoder().decode(AIOCRInsightResponse.self, from: jsonData)
-        let events = decoded.events ?? []
-        let event = events.first(where: { $0.needTodo == true }) ?? events.first
+        let normalizedEvents = (decoded.events ?? []).map { event in
+            AIOCREventInsight(
+                date: cleanedOptional(event.date),
+                time: cleanedOptional(event.time),
+                title: cleanedOptional(event.title),
+                keywords: Array(
+                    (event.keywords ?? [])
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { $0.isEmpty == false }
+                        .prefix(3)
+                ),
+                description: cleanedOptional(event.description),
+                needTodo: event.needTodo ?? false
+            )
+        }.filter { event in
+            event.date != nil ||
+            event.title != nil ||
+            event.description != nil ||
+            event.needTodo ||
+            event.keywords.isEmpty == false
+        }
+        let event = normalizedEvents.first(where: { $0.needTodo }) ?? normalizedEvents.first
         // 兼容“通用摘要 + 可选事件”的新结构，同时兼容旧的仅 events 返回格式。
         let cleanedKeywords = Array(
             (event?.keywords ?? decoded.keywords ?? [])
@@ -246,7 +284,8 @@ enum AIProviderService {
             title: cleanedTitle,
             keywords: cleanedKeywords,
             description: cleanedDescription,
-            needTodo: event?.needTodo ?? false
+            needTodo: event?.needTodo ?? false,
+            events: normalizedEvents
         )
     }
 
@@ -297,17 +336,20 @@ enum AIProviderService {
         return payload
     }
 
-    private static func userPrompt(rawText: String) -> String {
+    private static func userPrompt(rawText: String, currentDateContext: String) -> String {
             """
             你需要先理解 OCR 文本，再输出摘要和事件信息。只输出标准 JSON，无多余文字。
+            当前时间基准（必须严格使用，禁止自行假设）：
+            - \(currentDateContext)
 
             核心规则（严格执行，优先级从高到低）：
             1. 【年份推断逻辑】
                - 若文本中明确标注完整年份（如2025、2026、2027），以文本标注为准，禁止篡改。
-               - 若文本仅标注月日（如4月21日、6.13），**以模型服务器当前真实时间的年份为基准**，自动补全年份，禁止硬编码固定年份。
+               - 若文本仅标注月日（如4月21日、6.13），以“当前时间基准”的年份补全年份，禁止硬编码固定年份。
+               - 若文本出现两位年份（如26-4-11、26/4/11），按 20YY 解析为四位年份（26 -> 2026）。
                - 若文本无任何日期信息，不补全年份，date 字段填 null。
             2. 【时间判断逻辑】
-               - 以模型服务器当前真实时间为基准，仅识别晚于当前时间的未来事件，忽略已过期时间。
+               - 仅识别晚于“当前时间基准”的未来事件，忽略已过期时间。
                - 若补全年份后日期已过期，自动忽略该事件，不纳入 events 数组。
             3. 【摘要生成规则】
                - 无论文本是否包含未来事件，必须生成 `summary`，严格控制在50字以内，精准概括图片核心内容。
@@ -350,11 +392,49 @@ enum AIProviderService {
             - 没有未来事件时，events 返回 []，但 summary / title / keywords / description 仍需正常生成。
             - 文本为商品广告/通知/聊天/说明类，优先生成 summary 和 description，events 若无明确日程则为空数组。
             - 若OCR文本存在识别错误，以可理解的语义为准进行合理修正，禁止输出乱码或无意义内容。
+            - 输出前必须自检：将 events 中每一条 date+time 转成完整时间，若不晚于“当前时间基准”，就从 events 删除。
 
             文本内容：
             \(rawText)
             """
         }
+
+    private static let promptDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.timeZone = TimeZone.current
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
+
+    private static func currentDateContext() -> String {
+        let now = Date()
+        let timeZone = TimeZone.current
+        let offsetSeconds = timeZone.secondsFromGMT(for: now)
+        let sign = offsetSeconds >= 0 ? "+" : "-"
+        let absoluteSeconds = abs(offsetSeconds)
+        let hours = absoluteSeconds / 3600
+        let minutes = (absoluteSeconds % 3600) / 60
+        let offsetText = String(format: "%@%02d:%02d", sign, hours, minutes)
+        return "\(promptDateFormatter.string(from: now)) \(offsetText) (\(timeZone.identifier))"
+    }
+
+    private static func normalizedOCRTextForAI(_ text: String) -> String {
+        let normalizedLineBreaks = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let mergedLines = normalizedLineBreaks
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.isEmpty == false }
+            .joined(separator: " ")
+        let collapsedSpaces = mergedLines.replacingOccurrences(
+            of: #"[ \t]{2,}"#,
+            with: " ",
+            options: .regularExpression
+        )
+        return collapsedSpaces.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     private static func cleanedOptional(_ value: String?) -> String? {
         guard let value else { return nil }
