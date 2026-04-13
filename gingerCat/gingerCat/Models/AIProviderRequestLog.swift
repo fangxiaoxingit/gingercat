@@ -71,7 +71,7 @@ struct AIProviderRequestLogEntry: Codable, Identifiable, Hashable {
 }
 
 enum AIProviderRequestLogStore {
-    private static let maxRecordCount = 30
+    private static let maxRecordCount = 10
 
     static func logs(
         for provider: AIProvider,
@@ -81,8 +81,11 @@ enum AIProviderRequestLogStore {
               let decoded = try? JSONDecoder().decode([AIProviderRequestLogEntry].self, from: data) else {
             return []
         }
-
-        return decoded.sorted { $0.createdAt > $1.createdAt }
+        let normalized = normalizedLogs(decoded)
+        if normalized.count != decoded.count {
+            persist(normalized, for: provider, defaults: defaults)
+        }
+        return normalized
     }
 
     static func append(
@@ -91,13 +94,7 @@ enum AIProviderRequestLogStore {
     ) {
         var current = logs(for: entry.provider, defaults: defaults)
         current.insert(entry, at: 0)
-
-        if current.count > maxRecordCount {
-            current = Array(current.prefix(maxRecordCount))
-        }
-
-        guard let data = try? JSONEncoder().encode(current) else { return }
-        defaults.set(data, forKey: storageKey(for: entry.provider))
+        persist(normalizedLogs(current), for: entry.provider, defaults: defaults)
     }
 
     static func clear(
@@ -109,6 +106,19 @@ enum AIProviderRequestLogStore {
 
     private static func storageKey(for provider: AIProvider) -> String {
         "settings.ai.requestLogs.\(provider.rawValue)"
+    }
+
+    private static func normalizedLogs(_ entries: [AIProviderRequestLogEntry]) -> [AIProviderRequestLogEntry] {
+        Array(entries.sorted { $0.createdAt > $1.createdAt }.prefix(maxRecordCount))
+    }
+
+    private static func persist(
+        _ entries: [AIProviderRequestLogEntry],
+        for provider: AIProvider,
+        defaults: UserDefaults = .standard
+    ) {
+        guard let data = try? JSONEncoder().encode(entries) else { return }
+        defaults.set(data, forKey: storageKey(for: provider))
     }
 }
 

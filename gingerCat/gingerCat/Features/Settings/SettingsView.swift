@@ -327,10 +327,12 @@ private struct AIProviderConfigView: View {
 
                     modelFieldSection
 
-                    SecureField(String(localized: "API Key（由用户自行填写）"), text: binding(for: .apiKey))
-                        .textInputAutocapitalization(.never)
-                        .padding(10)
-                        .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    settingSecureField(
+                        title: String(localized: "API Key"),
+                        placeholder: String(localized: "API Key（由用户自行填写）"),
+                        text: binding(for: .apiKey)
+                    )
+                    .textInputAutocapitalization(.never)
 
                     Divider()
 
@@ -423,10 +425,14 @@ private struct AIProviderConfigView: View {
 
             if isRequestLogsVisible {
                 requestLogsSection
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 0.98, anchor: .top)),
+                            removal: .opacity
+                        )
+                    )
             }
         }
-        .animation(.easeInOut(duration: 0.22), value: isRequestLogsVisible)
     }
 
     private var providerHeader: some View {
@@ -471,21 +477,21 @@ private struct AIProviderConfigView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     settingTextField(
                         title: String(localized: "max_tokens"),
-                        placeholder: String(localized: "留空使用服务端默认"),
+                        placeholder: String(localized: "请输入（可选）"),
                         text: binding(for: .maxTokens)
                     )
                     .keyboardType(.numberPad)
 
                     settingTextField(
                         title: String(localized: "temperature"),
-                        placeholder: provider.allowsTemperature(for: modelID) ? String(localized: "留空使用服务端默认") : String(localized: "当前模型通常忽略该参数"),
+                        placeholder: provider.allowsTemperature(for: modelID) ? String(localized: "请输入（可选）") : String(localized: "当前模型通常忽略该参数"),
                         text: binding(for: .temperature)
                     )
                     .keyboardType(.decimalPad)
 
                     settingTextField(
                         title: String(localized: "top_p"),
-                        placeholder: provider.allowsTopP(for: modelID) ? String(localized: "留空使用服务端默认") : String(localized: "当前模型通常忽略该参数"),
+                        placeholder: provider.allowsTopP(for: modelID) ? String(localized: "请输入（可选）") : String(localized: "当前模型通常忽略该参数"),
                         text: binding(for: .topP)
                     )
                     .keyboardType(.decimalPad)
@@ -663,6 +669,17 @@ private struct AIProviderConfigView: View {
         }
     }
 
+    private func settingSecureField(title: String, placeholder: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            SecureField(placeholder, text: text)
+                .padding(10)
+                .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+    }
+
     private var requestLogsSection: some View {
         RequestLogsSectionView(
             requestLogs: requestLogs,
@@ -718,7 +735,7 @@ private struct AIProviderConfigView: View {
     }
 
     private func toggleRequestLogsVisibility() {
-        withAnimation {
+        withAnimation(.easeInOut(duration: 0.22)) {
             isRequestLogsVisible.toggle()
         }
     }
