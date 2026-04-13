@@ -14,6 +14,7 @@ struct HomeScannerView: View {
     @Query(sort: \ScanRecord.createdAt, order: .reverse) private var records: [ScanRecord]
 
     @AppStorage(AppSettingsKeys.aiSummaryEnabled) private var aiSummaryEnabled = false
+    @AppStorage(AppSettingsKeys.autoAddTodoAfterAISummary) private var autoAddTodoAfterAISummary = true
     @AppStorage(AppSettingsKeys.haptics) private var hapticsEnabled = true
     @AppStorage(AppSettingsKeys.hapticsIntensity) private var hapticsIntensityRaw = HapticFeedbackIntensity.medium.rawValue
 
@@ -1038,16 +1039,39 @@ struct HomeScannerView: View {
 
         if result.isOCRCompleted {
             playSuccessHaptic()
-            Task {
+            Task { @MainActor in
+                let autoAddedTodoCount = await autoAddTodoIfNeeded(for: record, result: result)
                 if result.didAISummaryRequestFail {
                     await OCRCompletionNotifier.notifyAISummaryFailure(record: record)
                 } else {
-                    await OCRCompletionNotifier.notify(record: record)
+                    await OCRCompletionNotifier.notify(
+                        record: record,
+                        autoAddedTodoCount: autoAddedTodoCount
+                    )
                 }
             }
         } else {
             activeAlert = HomeAlert(message: result.summary)
         }
+    }
+
+    @MainActor
+    private func autoAddTodoIfNeeded(for record: ScanRecord, result: OCRPipelineResult) async -> Int {
+        guard result.usedAISummary else {
+            return 0
+        }
+        guard result.didAISummaryRequestFail == false else {
+            return 0
+        }
+
+        let autoAddResult = await TodoAutoAddService.autoAddIfNeeded(
+            for: record,
+            enabled: autoAddTodoAfterAISummary
+        )
+        if autoAddResult.addedCount > 0 {
+            try? modelContext.save()
+        }
+        return autoAddResult.addedCount
     }
 
     @MainActor

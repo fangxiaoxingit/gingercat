@@ -47,6 +47,11 @@ enum BackgroundImageImportPipeline {
 
         let runtimeConfig = AIProviderConfigStore.selectedRuntimeConfig(defaults: defaults)
         let aiSummaryEnabled = defaults.bool(forKey: AppSettingsKeys.aiSummaryEnabled)
+        let autoAddTodoAfterAISummary = boolValue(
+            forKey: AppSettingsKeys.autoAddTodoAfterAISummary,
+            defaults: defaults,
+            defaultValue: true
+        )
         let result = await runRecognitionPipeline(
             imageData: imageData,
             source: source,
@@ -55,12 +60,23 @@ enum BackgroundImageImportPipeline {
         )
 
         applyRecognitionResult(result, to: record, modelContext: modelContext)
+        let autoAddResult = await autoAddTodoIfNeeded(
+            for: record,
+            result: result,
+            enabled: autoAddTodoAfterAISummary
+        )
+        if autoAddResult.addedCount > 0 {
+            try? modelContext.save()
+        }
         if result.isOCRCompleted {
             if result.didAISummaryRequestFail {
                 await OCRCompletionNotifier.notifyAISummaryFailure(record: record)
             } else {
                 // 捷径后台解析完成后也触发同一套系统提醒，保证无论入口都能收到一致的完成反馈。
-                await OCRCompletionNotifier.notify(record: record)
+                await OCRCompletionNotifier.notify(
+                    record: record,
+                    autoAddedTodoCount: autoAddResult.addedCount
+                )
             }
         }
         return record
@@ -71,6 +87,31 @@ enum BackgroundImageImportPipeline {
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         let container = try ModelContainer(for: schema, configurations: [configuration])
         return ModelContext(container)
+    }
+
+    private static func boolValue(
+        forKey key: String,
+        defaults: UserDefaults,
+        defaultValue: Bool
+    ) -> Bool {
+        guard defaults.object(forKey: key) != nil else {
+            return defaultValue
+        }
+        return defaults.bool(forKey: key)
+    }
+
+    private static func autoAddTodoIfNeeded(
+        for record: ScanRecord,
+        result: BackgroundOCRPipelineResult,
+        enabled: Bool
+    ) async -> TodoAutoAddService.Result {
+        guard result.usedAISummary else {
+            return .init(addedCount: 0)
+        }
+        guard result.didAISummaryRequestFail == false else {
+            return .init(addedCount: 0)
+        }
+        return await TodoAutoAddService.autoAddIfNeeded(for: record, enabled: enabled)
     }
 
     private static func runRecognitionPipeline(

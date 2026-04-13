@@ -25,9 +25,17 @@ final class ReminderService {
 
     func addReminder(for record: ScanRecord) async throws {
         try await addReminder(
-            title: reminderTitle(for: record),
-            notes: reminderNotes(for: record),
+            title: reminderTitle(for: record, event: nil),
+            notes: reminderNotes(for: record, event: nil),
             dueDate: record.eventDate
+        )
+    }
+
+    func addReminder(for record: ScanRecord, event: ScanTodoEvent) async throws {
+        try await addReminder(
+            title: reminderTitle(for: record, event: event),
+            notes: reminderNotes(for: record, event: event),
+            dueDate: event.date
         )
     }
 
@@ -76,7 +84,17 @@ final class ReminderService {
         }
     }
 
-    private func reminderTitle(for record: ScanRecord) -> String {
+    private func reminderTitle(for record: ScanRecord, event: ScanTodoEvent?) -> String {
+        if let eventTitle = event?.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+           eventTitle.isEmpty == false {
+            return eventTitle
+        }
+
+        if let eventDescription = event?.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+           eventDescription.isEmpty == false {
+            return String(eventDescription.prefix(40))
+        }
+
         if let eventTitle = record.eventTitle?.trimmingCharacters(in: .whitespacesAndNewlines), eventTitle.isEmpty == false {
             return eventTitle
         }
@@ -94,10 +112,14 @@ final class ReminderService {
         return String(localized: "识别记录提醒")
     }
 
-    private func reminderNotes(for record: ScanRecord) -> String {
+    private func reminderNotes(for record: ScanRecord, event: ScanTodoEvent?) -> String {
         var lines: [String] = []
         lines.append("来源：\(record.source)")
-        if let description = record.eventDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+
+        let eventDescription = event?.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let eventDescription, eventDescription.isEmpty == false {
+            lines.append("事件描述：\(eventDescription)")
+        } else if let description = record.eventDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
            description.isEmpty == false {
             lines.append("事件描述：\(description)")
         } else {
@@ -105,8 +127,16 @@ final class ReminderService {
             let label = record.usedAISummary ? "摘要" : "识别内容"
             lines.append("\(label)：\(record.summary)")
         }
-        if record.eventKeywords.isEmpty == false {
+
+        let eventKeywords = event?.keywords ?? []
+        if eventKeywords.isEmpty == false {
+            lines.append("关键词：\(eventKeywords.joined(separator: "、"))")
+        } else if record.eventKeywords.isEmpty == false {
             lines.append("关键词：\(record.eventKeywords.joined(separator: "、"))")
+        }
+
+        if let event {
+            lines.append("待办时间：\(AppDateTimeFormatter.string(from: event.date))")
         }
 
         let rawText = record.recognizedText.trimmingCharacters(in: .whitespacesAndNewlines)

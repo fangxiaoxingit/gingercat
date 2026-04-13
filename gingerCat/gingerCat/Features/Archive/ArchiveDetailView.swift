@@ -11,6 +11,7 @@ struct ArchiveDetailView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @AppStorage(AppSettingsKeys.haptics) private var hapticsEnabled = true
+    @AppStorage(AppSettingsKeys.autoAddTodoAfterAISummary) private var autoAddTodoAfterAISummary = true
     @AppStorage(AppSettingsKeys.hapticsIntensity) private var hapticsIntensityRaw = HapticFeedbackIntensity.medium.rawValue
 
     @Bindable var record: ScanRecord
@@ -518,9 +519,19 @@ struct ArchiveDetailView: View {
                 insight: insight,
                 lineBoxes: recognition.lineBoxes
             )
+            let autoAddResult = await TodoAutoAddService.autoAddIfNeeded(
+                for: record,
+                enabled: autoAddTodoAfterAISummary
+            )
+            if autoAddResult.addedCount > 0 {
+                try? modelContext.save()
+            }
+            let successMessage = autoAddResult.addedCount > 0
+                ? String(localized: "已更新标题、详细内容、关键词和日期时间，并自动加入 \(autoAddResult.addedCount) 条待办。")
+                : String(localized: "已更新标题、详细内容、关键词和日期时间。")
             reminderFeedback = ReminderFeedback(
                 title: String(localized: "AI摘要完成"),
-                message: String(localized: "已更新标题、详细内容、关键词和日期时间。")
+                message: successMessage
             )
         } catch let error as AIProviderServiceError {
             reminderFeedback = ReminderFeedback(

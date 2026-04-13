@@ -9,7 +9,7 @@ import ActivityKit
 
 @MainActor
 enum OCRCompletionNotifier {
-    static func notify(record: ScanRecord) async {
+    static func notify(record: ScanRecord, autoAddedTodoCount: Int = 0) async {
         #if canImport(UIKit)
         // 只在用户不在前台时发送系统级提醒，避免和当前页面的即时反馈重复。
         guard UIApplication.shared.applicationState != .active else { return }
@@ -32,18 +32,16 @@ enum OCRCompletionNotifier {
             recordID: record.id,
             title: title,
             summary: summary,
-            dateText: dateText
+            dateText: dateText,
+            autoAddedTodoCount: autoAddedTodoCount
         )
     }
 
     static func notifyAISummaryFailure(record: ScanRecord) async {
-        #if canImport(UIKit)
-        guard UIApplication.shared.applicationState != .active else { return }
-        #endif
-
         let title = completionTitle(for: record)
         let dateText = completionDateText(for: record)
 
+        // AI 摘要失败需要明确反馈，前台也允许弹系统通知，避免“有时收不到失败提醒”。
         await OCRLocalNotificationService.notifyAISummaryFailure(
             recordID: record.id,
             title: title,
@@ -84,10 +82,13 @@ private enum OCRLocalNotificationService {
         recordID: UUID,
         title: String,
         summary: String,
-        dateText: String
+        dateText: String,
+        autoAddedTodoCount: Int
     ) async {
         let content = UNMutableNotificationContent()
-        content.title = String(localized: "识别完成")
+        content.title = autoAddedTodoCount > 0
+            ? String(localized: "识别完成（已加入待办）")
+            : String(localized: "识别完成")
         content.body = "\(title)\n\(summary)\n\(dateText)"
         content.sound = .default
         content.userInfo = userInfo(for: recordID)

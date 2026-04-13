@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @AppStorage(AppSettingsKeys.aiSummaryEnabled) private var aiSummaryEnabled = false
+    @AppStorage(AppSettingsKeys.autoAddTodoAfterAISummary) private var autoAddTodoAfterAISummary = true
     @AppStorage(AppSettingsKeys.haptics) private var hapticsEnabled = true
     @AppStorage(AppSettingsKeys.hapticsIntensity) private var hapticsIntensityRaw = HapticFeedbackIntensity.medium.rawValue
     @AppStorage(AppSettingsKeys.appearanceMode) private var appearanceModeRaw = AppearanceMode.automatic.rawValue
@@ -47,11 +48,6 @@ struct SettingsView: View {
     private var settingsSections: some View {
         VStack(alignment: .leading, spacing: 14) {
             aiSwitchSection
-
-            if aiSummaryEnabled {
-                modelListSection
-            }
-
             appSettingsSection
         }
     }
@@ -65,24 +61,23 @@ struct SettingsView: View {
                 Text(String(localized: "默认关闭。开启后会在 OCR 结果基础上调用模型生成摘要。"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-            }
-        }
-    }
 
-    private var modelListSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(String(localized: "模型列表"))
-                .font(.headline)
-                .foregroundStyle(.primary)
+                if aiSummaryEnabled {
+                    Divider()
+                        .padding(.top, 2)
 
-            GlassCard(cornerRadius: 18) {
-                VStack(spacing: 0) {
-                    ForEach(Array(AIProvider.allCases.enumerated()), id: \.element.id) { index, provider in
-                        providerRow(provider)
+                    Text(String(localized: "模型列表"))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
 
-                        if index < AIProvider.allCases.count - 1 {
-                            Divider()
-                                .padding(.leading, 52)
+                    VStack(spacing: 0) {
+                        ForEach(Array(AIProvider.allCases.enumerated()), id: \.element.id) { index, provider in
+                            providerRow(provider)
+
+                            if index < AIProvider.allCases.count - 1 {
+                                Divider()
+                                    .padding(.leading, 52)
+                            }
                         }
                     }
                 }
@@ -186,6 +181,31 @@ struct SettingsView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+
+                    Divider()
+                        .padding(.leading, 36)
+
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.arrow.trianglehead.clockwise")
+                            .font(.body)
+                            .foregroundStyle(AppTheme.primary)
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(String(localized: "自动添加待办"))
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                            Text(String(localized: "AI 摘要成功后自动加入系统提醒事项"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        Toggle("", isOn: $autoAddTodoAfterAISummary)
+                            .labelsHidden()
+                    }
+                    .padding(.vertical, 20)
 
                     Divider()
                         .padding(.leading, 36)

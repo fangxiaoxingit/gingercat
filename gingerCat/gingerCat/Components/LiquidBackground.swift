@@ -6,7 +6,7 @@ struct LiquidBackground: View {
     var body: some View {
         Group {
             if colorScheme == .dark {
-                Color(uiColor: .systemGray6)
+                Color(uiColor: .systemBackground)
             } else {
                 Color(uiColor: .systemGroupedBackground)
             }

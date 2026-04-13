@@ -2,6 +2,7 @@ import Foundation
 
 enum AppSettingsKeys {
     static let aiSummaryEnabled = "settings.aiSummaryEnabled"
+    static let autoAddTodoAfterAISummary = "settings.autoAddTodoAfterAISummary"
     static let haptics = "settings.haptics"
     static let hapticsIntensity = "settings.hapticsIntensity"
     static let appearanceMode = "settings.appearanceMode"
@@ -11,7 +12,6 @@ enum AIProvider: String, CaseIterable, Identifiable {
     case deepSeek = "deepseek"
     case kimi
     case miniMax = "minimax"
-    case xiaomiMiMo = "xiaomi-mimo"
     case thirdParty = "third-party"
 
     var id: String { rawValue }
@@ -24,8 +24,6 @@ enum AIProvider: String, CaseIterable, Identifiable {
             return "Kimi"
         case .miniMax:
             return "MiniMax"
-        case .xiaomiMiMo:
-            return "XiaoMi MiMo"
         case .thirdParty:
             return "OpenAI"
         }
@@ -39,8 +37,6 @@ enum AIProvider: String, CaseIterable, Identifiable {
             return String(localized: "Moonshot AI")
         case .miniMax:
             return String(localized: "MiniMax")
-        case .xiaomiMiMo:
-            return String(localized: "XiaoMi MiMo")
         case .thirdParty:
             return String(localized: "OpenAI")
         }
@@ -54,8 +50,6 @@ enum AIProvider: String, CaseIterable, Identifiable {
             return "https://api.moonshot.cn/v1"
         case .miniMax:
             return "https://api.minimaxi.com/v1"
-        case .xiaomiMiMo:
-            return "https://api.xiaomimimo.com/v1"
         case .thirdParty:
             return "https://api.openai.com/v1"
         }
@@ -69,8 +63,6 @@ enum AIProvider: String, CaseIterable, Identifiable {
             return "kimi-k2.5"
         case .miniMax:
             return "MiniMax-M2.7"
-        case .xiaomiMiMo:
-            return "mimo-v2-pro"
         case .thirdParty:
             return "gpt-5.4"
         }
@@ -89,8 +81,6 @@ enum AIProvider: String, CaseIterable, Identifiable {
                 "MiniMax-M2.5",
                 "MiniMax-M2.5-highspeed"
             ]
-        case .xiaomiMiMo:
-            return ["mimo-v2-pro", "mimo-v2-omni"]
         case .thirdParty:
             return ["gpt-5.4", "gpt-5.4-mini", "gpt-4.1"]
         }
@@ -100,7 +90,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         switch self {
         case .deepSeek, .kimi, .thirdParty:
             return true
-        case .miniMax, .xiaomiMiMo:
+        case .miniMax:
             return false
         }
     }
@@ -113,8 +103,6 @@ enum AIProvider: String, CaseIterable, Identifiable {
             return true
         case .miniMax:
             return true
-        case .xiaomiMiMo:
-            return true
         case .thirdParty:
             return true
         }
@@ -126,8 +114,6 @@ enum AIProvider: String, CaseIterable, Identifiable {
 
     var maxTokensParameterName: String {
         switch self {
-        case .xiaomiMiMo:
-            return "max_completion_tokens"
         case .deepSeek, .kimi, .miniMax, .thirdParty:
             return "max_tokens"
         }
@@ -155,8 +141,6 @@ enum AIProviderSettingsKeys {
             return "settings.kimi.baseURL"
         case .miniMax:
             return "settings.minimax.baseURL"
-        case .xiaomiMiMo:
-            return "settings.xiaomimimo.baseURL"
         case .thirdParty:
             return "settings.thirdparty.baseURL"
         }
@@ -170,8 +154,6 @@ enum AIProviderSettingsKeys {
             return "settings.kimi.model"
         case .miniMax:
             return "settings.minimax.model"
-        case .xiaomiMiMo:
-            return "settings.xiaomimimo.model"
         case .thirdParty:
             return "settings.thirdparty.model"
         }
@@ -185,8 +167,6 @@ enum AIProviderSettingsKeys {
             return "settings.kimi.apiKey"
         case .miniMax:
             return "settings.minimax.apiKey"
-        case .xiaomiMiMo:
-            return "settings.xiaomimimo.apiKey"
         case .thirdParty:
             return "settings.thirdparty.apiKey"
         }
@@ -200,8 +180,6 @@ enum AIProviderSettingsKeys {
             return "settings.kimi.maxTokens"
         case .miniMax:
             return "settings.minimax.maxTokens"
-        case .xiaomiMiMo:
-            return "settings.xiaomimimo.maxTokens"
         case .thirdParty:
             return "settings.thirdparty.maxTokens"
         }
@@ -215,8 +193,6 @@ enum AIProviderSettingsKeys {
             return "settings.kimi.temperature"
         case .miniMax:
             return "settings.minimax.temperature"
-        case .xiaomiMiMo:
-            return "settings.xiaomimimo.temperature"
         case .thirdParty:
             return "settings.thirdparty.temperature"
         }
@@ -230,8 +206,6 @@ enum AIProviderSettingsKeys {
             return "settings.kimi.topP"
         case .miniMax:
             return "settings.minimax.topP"
-        case .xiaomiMiMo:
-            return "settings.xiaomimimo.topP"
         case .thirdParty:
             return "settings.thirdparty.topP"
         }
@@ -246,6 +220,7 @@ enum KimiSettingsKeys {
     static let temperature = AIProviderSettingsKeys.temperature(for: .kimi)
     static let topP = AIProviderSettingsKeys.topP(for: .kimi)
     static let aiSummaryEnabled = AppSettingsKeys.aiSummaryEnabled
+    static let autoAddTodoAfterAISummary = AppSettingsKeys.autoAddTodoAfterAISummary
     static let haptics = AppSettingsKeys.haptics
     static let hapticsIntensity = AppSettingsKeys.hapticsIntensity
     static let appearanceMode = AppSettingsKeys.appearanceMode
