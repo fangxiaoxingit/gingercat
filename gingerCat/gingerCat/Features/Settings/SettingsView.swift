@@ -444,12 +444,6 @@ private struct AIProviderConfigView: View {
             Text(provider.detailText)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-
-            if let providerGuidanceText {
-                Text(providerGuidanceText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 
@@ -501,22 +495,6 @@ private struct AIProviderConfigView: View {
             }
         }
     }
-
-    private var providerGuidanceText: String? {
-        switch provider {
-        case .deepSeek:
-            return String(localized: "推荐模型：deepseek-chat、deepseek-reasoner。若使用 deepseek-reasoner，temperature 与 top_p 往往会被忽略。")
-        case .kimi:
-            return nil
-        case .miniMax:
-            return String(localized: "推荐使用 OpenAI 兼容接口。默认地址为 https://api.minimaxi.com/v1，推荐模型可按场景选择标准版或 highspeed 版本。")
-        case .xiaomiMiMo:
-            return String(localized: "官方 OpenAI 兼容地址为 https://api.xiaomimimo.com/v1，常用模型为 mimo-v2-pro；多模态场景可尝试 mimo-v2-omni。")
-        case .thirdParty:
-            return String(localized: "OpenAI 原生接口默认地址为 https://api.openai.com/v1，支持直接填写官方模型与 API Key。")
-        }
-    }
-
     private var modelFieldSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             settingTextField(
@@ -575,7 +553,7 @@ private struct AIProviderConfigView: View {
 
         do {
             let reply = try await AIProviderService.sendTestPrompt(
-                String(localized: "请用 30 个字介绍你是什么模型，目前的参数是什么，来自哪家公司"),
+                String(localized: "请用 30 个字介绍你是来自哪家公司的什么模型，不得返回其他内容"),
                 config: config
             )
             persistTestStatus(isSuccess: true)
@@ -816,7 +794,7 @@ private struct RequestLogsHeaderView: View {
 
     var body: some View {
         HStack {
-            Text(String(localized: "请求记录"))
+            Text(String(localized: "请求记录（本地）"))
                 .font(.headline)
                 .foregroundStyle(.primary)
 

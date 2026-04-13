@@ -1667,6 +1667,7 @@ private struct HomeRecordCollage: View {
     let records: [ScanRecord]
     let onSelectRecord: (ScanRecord) -> Void
     @State private var animateCards = false
+    private let cardSide: CGFloat = 136
 
     var body: some View {
         ZStack {
@@ -1699,6 +1700,7 @@ private struct HomeRecordCollage: View {
         } label: {
             HomeCollageCard(
                 record: record,
+                side: cardSide,
                 angle: angle,
                 offset: offset,
                 isFront: isFront
@@ -1722,9 +1724,9 @@ private struct HomeRecordCollage: View {
 
     private var offsets: [CGSize] {
         [
-            CGSize(width: -78, height: -4),
-            CGSize(width: 0, height: 14),
-            CGSize(width: 78, height: -4)
+            CGSize(width: -84, height: -8),
+            CGSize(width: 0, height: 18),
+            CGSize(width: 84, height: -8)
         ]
     }
 
@@ -1743,6 +1745,7 @@ private struct HomeRecordCollage: View {
 private struct HomeCollageCard: View {
     @Environment(\.colorScheme) private var colorScheme
     let record: ScanRecord
+    let side: CGFloat
     let angle: Double
     let offset: CGSize
     let isFront: Bool
@@ -1756,15 +1759,20 @@ private struct HomeCollageCard: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 120, height: 120)
+                    .frame(width: side, height: side)
                     .clipped()
             } else {
                 placeholderContent
             }
         }
-        .frame(width: 120, height: 120)
+        .frame(width: side, height: side)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .shadow(color: shadowColor, radius: 8, x: 0, y: 3)
+        .shadow(
+            color: shadowColor,
+            radius: isFront ? 16 : 12,
+            x: 0,
+            y: isFront ? 9 : 6
+        )
     }
 
     private var image: UIImage? {
@@ -1796,9 +1804,9 @@ private struct HomeCollageCard: View {
 
     private var shadowColor: Color {
         if colorScheme == .dark {
-            return Color.black.opacity(isFront ? 0.32 : 0.22)
+            return Color.black.opacity(isFront ? 0.46 : 0.34)
         } else {
-            return Color.black.opacity(isFront ? 0.12 : 0.08)
+            return Color.black.opacity(isFront ? 0.20 : 0.14)
         }
     }
 }

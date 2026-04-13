@@ -15,6 +15,7 @@ struct ArchiveView: View {
 
     @State private var searchText = ""
     @State private var selectedRecord: ScanRecord?
+    @State private var selectedFilter: ArchiveRecordFilter = .all
 
     private var hapticsIntensity: HapticFeedbackIntensity {
         HapticFeedbackIntensity(rawValue: hapticsIntensityRaw) ?? .medium
@@ -33,6 +34,23 @@ struct ArchiveView: View {
             }
         }
         .navigationTitle(String(localized: "历史记录"))
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Picker(String(localized: "筛选条件"), selection: $selectedFilter) {
+                        ForEach(ArchiveRecordFilter.allCases, id: \.self) { option in
+                            Text(option.title)
+                                .tag(option)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.primary)
+                }
+                .accessibilityLabel(String(localized: "更多操作"))
+            }
+        }
         .searchable(text: $searchText, prompt: String(localized: "搜索识别内容、摘要或备注"))
         .navigationDestination(item: $selectedRecord) { record in
             ArchiveDetailView(record: record)
@@ -67,6 +85,18 @@ struct ArchiveView: View {
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
             }
+
+            HStack {
+                Spacer(minLength: 0)
+                Text(String(localized: "没有更多记录"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 14)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -85,17 +115,55 @@ struct ArchiveView: View {
     }
 
     private var filteredRecords: [ScanRecord] {
-        guard searchText.isEmpty == false else {
-            return records
+        let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if keyword.isEmpty == false {
+            return records.filter { matchesSearch($0, keyword: keyword) }
         }
 
+        let now = Date()
+        let calendar = Calendar.current
         return records.filter { record in
-            record.summary.localizedCaseInsensitiveContains(searchText) ||
-            (record.eventDescription ?? "").localizedCaseInsensitiveContains(searchText) ||
-            (record.eventTitle ?? "").localizedCaseInsensitiveContains(searchText) ||
-            record.eventKeywordsText.localizedCaseInsensitiveContains(searchText) ||
-            record.note.localizedCaseInsensitiveContains(searchText)
+            switch selectedFilter {
+            case .all:
+                return true
+            case .notAdded:
+                return isTodoRecord(record) && hasAddedReminder(record) == false
+            case .added:
+                return isTodoRecord(record) && hasAddedReminder(record)
+            case .recent7Days:
+                guard let startDate = calendar.date(byAdding: .day, value: -7, to: now) else {
+                    return true
+                }
+                return record.createdAt >= startDate
+            case .recentMonth:
+                guard let startDate = calendar.date(byAdding: .month, value: -1, to: now) else {
+                    return true
+                }
+                return record.createdAt >= startDate
+            }
         }
+    }
+
+    private func matchesSearch(_ record: ScanRecord, keyword: String) -> Bool {
+        record.summary.localizedCaseInsensitiveContains(keyword) ||
+        (record.eventDescription ?? "").localizedCaseInsensitiveContains(keyword) ||
+        (record.eventTitle ?? "").localizedCaseInsensitiveContains(keyword) ||
+        record.eventKeywordsText.localizedCaseInsensitiveContains(keyword) ||
+        record.note.localizedCaseInsensitiveContains(keyword)
+    }
+
+    private func isTodoRecord(_ record: ScanRecord) -> Bool {
+        if record.todoEvents.contains(where: { $0.needTodo }) {
+            return true
+        }
+        return record.needTodo || record.resolvedIntent == .schedule
+    }
+
+    private func hasAddedReminder(_ record: ScanRecord) -> Bool {
+        if record.addedTodoEventKeys.isEmpty == false {
+            return true
+        }
+        return record.hasAddedTodoReminder
     }
 
     private func delete(_ record: ScanRecord) {
@@ -118,6 +186,29 @@ struct ArchiveView: View {
     }
 }
 
+private enum ArchiveRecordFilter: CaseIterable {
+    case all
+    case notAdded
+    case added
+    case recent7Days
+    case recentMonth
+
+    var title: String {
+        switch self {
+        case .all:
+            return String(localized: "全部记录")
+        case .notAdded:
+            return String(localized: "未添加")
+        case .added:
+            return String(localized: "已添加")
+        case .recent7Days:
+            return String(localized: "最近 7 天")
+        case .recentMonth:
+            return String(localized: "最近一个月")
+        }
+    }
+}
+
 private struct ArchiveRowContent: View {
     let record: ScanRecord
 
@@ -132,9 +223,7 @@ private struct ArchiveRowContent: View {
                     .truncationMode(.tail)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(AppDateTimeFormatter.string(from: record.eventDate ?? record.createdAt))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    metaInfoLine
 
                     if record.eventKeywords.isEmpty == false {
                         keywordTags
@@ -157,6 +246,69 @@ private struct ArchiveRowContent: View {
         }
         let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
         return summary.isEmpty ? String(localized: "正在识别内容...") : summary
+    }
+
+    private var metaInfoLine: some View {
+        HStack(spacing: 8) {
+            if isTodoRecord {
+                Text(String(localized: "待办时间：\(AppDateTimeFormatter.string(from: displayedDate))"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let todoStatusText {
+                    Text(todoStatusText)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(hasAddedTodoReminder ? AppTheme.primary : AppTheme.primaryDark)
+                }
+            } else {
+                Text(AppDateTimeFormatter.string(from: displayedDate))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var isTodoRecord: Bool {
+        if record.todoEvents.contains(where: { $0.needTodo }) {
+            return true
+        }
+        return record.needTodo
+    }
+
+    private var hasAddedTodoReminder: Bool {
+        if record.addedTodoEventKeys.isEmpty == false {
+            return true
+        }
+        return record.hasAddedTodoReminder
+    }
+
+    private var todoStatusText: String? {
+        guard isTodoRecord else { return nil }
+        return hasAddedTodoReminder
+            ? String(localized: "已添加")
+            : String(localized: "未添加")
+    }
+
+    private var displayedDate: Date {
+        if let todoDate = firstTodoDate {
+            return todoDate
+        }
+        return record.eventDate ?? record.createdAt
+    }
+
+    private var firstTodoDate: Date? {
+        let sortedTodoDates = record.todoEvents
+            .filter(\.needTodo)
+            .map(\.date)
+            .sorted()
+        if sortedTodoDates.isEmpty == false {
+            let now = Date()
+            return sortedTodoDates.first(where: { $0 > now }) ?? sortedTodoDates.first
+        }
+        if record.needTodo {
+            return record.eventDate
+        }
+        return nil
     }
 
     private var keywordTags: some View {

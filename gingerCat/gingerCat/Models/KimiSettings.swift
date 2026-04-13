@@ -34,15 +34,15 @@ enum AIProvider: String, CaseIterable, Identifiable {
     var detailText: String {
         switch self {
         case .deepSeek:
-            return String(localized: "深度求索 · OpenAI 兼容接口")
+            return String(localized: "深度求索")
         case .kimi:
-            return String(localized: "Moonshot AI · OpenAI 兼容接口")
+            return String(localized: "Moonshot AI")
         case .miniMax:
-            return String(localized: "MiniMax · OpenAI 兼容接口")
+            return String(localized: "MiniMax")
         case .xiaomiMiMo:
-            return String(localized: "小米 MiMo · OpenAI 兼容接口")
+            return String(localized: "XiaoMi MiMo")
         case .thirdParty:
-            return String(localized: "OpenAI · 原生接口")
+            return String(localized: "OpenAI")
         }
     }
 
