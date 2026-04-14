@@ -45,6 +45,7 @@ struct HomeScannerView: View {
     @ObservedObject private var recordNavigationCenter = RecordNavigationCenter.shared
     @GestureState private var isQuickAddPressed = false
     @State private var pendingNotificationPresentationTask: Task<Void, Never>?
+    @State private var dueReminderRefreshTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -151,6 +152,7 @@ struct HomeScannerView: View {
                 consumePendingExternalImportIfNeeded()
                 consumeLatestExternalImportErrorIfNeeded()
                 syncTodoWidgetSnapshot()
+                scheduleDueReminderRefresh()
             }
             .onReceive(recordNavigationCenter.$pendingRecordID) { _ in
                 openPendingNotificationRecordIfNeeded()
@@ -159,6 +161,7 @@ struct HomeScannerView: View {
                 guard newPhase == .active else { return }
                 openPendingNotificationRecordIfNeeded()
                 syncTodoWidgetSnapshot()
+                scheduleDueReminderRefresh()
             }
             .onChange(of: externalImportCenter.pendingImport?.id) { _, _ in
                 consumePendingExternalImportIfNeeded()
@@ -168,6 +171,7 @@ struct HomeScannerView: View {
             }
             .onChange(of: todoWidgetSyncSignatures) { _, _ in
                 syncTodoWidgetSnapshot()
+                scheduleDueReminderRefresh()
             }
             .alert(item: $activeAlert) { alert in
                 Alert(
@@ -183,6 +187,8 @@ struct HomeScannerView: View {
                 toastDismissTask = nil
                 pendingNotificationPresentationTask?.cancel()
                 pendingNotificationPresentationTask = nil
+                dueReminderRefreshTask?.cancel()
+                dueReminderRefreshTask = nil
             }
         }
     }
@@ -537,6 +543,14 @@ struct HomeScannerView: View {
 
     private func syncTodoWidgetSnapshot() {
         TodoWidgetSnapshotSync.sync(records: records)
+    }
+
+    private func scheduleDueReminderRefresh() {
+        dueReminderRefreshTask?.cancel()
+        dueReminderRefreshTask = Task { @MainActor in
+            await TodoDueNotificationScheduler.refresh(for: records)
+            dueReminderRefreshTask = nil
+        }
     }
 
     private var pendingTodos: [PendingTodoItem] {

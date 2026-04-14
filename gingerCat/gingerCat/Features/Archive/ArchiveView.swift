@@ -240,10 +240,24 @@ private struct ArchiveRowContent: View {
     }
 
     private var summaryText: String {
-        let description = (record.eventDescription ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if description.isEmpty == false {
-            return description
+        let title = (record.eventTitle ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if title.isEmpty == false {
+            return title
         }
+
+        let todoTitle = record.todoEvents
+            .sorted { lhs, rhs in
+                lhs.date < rhs.date
+            }
+            .compactMap { event -> String? in
+                let trimmed = (event.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+            .first
+        if let todoTitle {
+            return todoTitle
+        }
+
         let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
         return summary.isEmpty ? String(localized: "正在识别内容...") : summary
     }

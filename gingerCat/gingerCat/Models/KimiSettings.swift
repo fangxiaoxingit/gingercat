@@ -3,6 +3,8 @@ import Foundation
 enum AppSettingsKeys {
     static let aiSummaryEnabled = "settings.aiSummaryEnabled"
     static let autoAddTodoAfterAISummary = "settings.autoAddTodoAfterAISummary"
+    static let todoDueReminderEnabled = "settings.todoDueReminderEnabled"
+    static let todoDueReminderTime = "settings.todoDueReminderTime"
     static let haptics = "settings.haptics"
     static let hapticsIntensity = "settings.hapticsIntensity"
     static let appearanceMode = "settings.appearanceMode"
@@ -221,6 +223,8 @@ enum KimiSettingsKeys {
     static let topP = AIProviderSettingsKeys.topP(for: .kimi)
     static let aiSummaryEnabled = AppSettingsKeys.aiSummaryEnabled
     static let autoAddTodoAfterAISummary = AppSettingsKeys.autoAddTodoAfterAISummary
+    static let todoDueReminderEnabled = AppSettingsKeys.todoDueReminderEnabled
+    static let todoDueReminderTime = AppSettingsKeys.todoDueReminderTime
     static let haptics = AppSettingsKeys.haptics
     static let hapticsIntensity = AppSettingsKeys.hapticsIntensity
     static let appearanceMode = AppSettingsKeys.appearanceMode

@@ -1,12 +1,17 @@
 import SwiftUI
+import SwiftData
 
 struct SettingsView: View {
+    @Query(sort: \ScanRecord.createdAt, order: .reverse) private var records: [ScanRecord]
     @AppStorage(AppSettingsKeys.aiSummaryEnabled) private var aiSummaryEnabled = false
     @AppStorage(AppSettingsKeys.autoAddTodoAfterAISummary) private var autoAddTodoAfterAISummary = true
+    @AppStorage(AppSettingsKeys.todoDueReminderEnabled) private var todoDueReminderEnabled = true
+    @AppStorage(AppSettingsKeys.todoDueReminderTime) private var todoDueReminderTimeRaw = "08:00"
     @AppStorage(AppSettingsKeys.haptics) private var hapticsEnabled = true
     @AppStorage(AppSettingsKeys.hapticsIntensity) private var hapticsIntensityRaw = HapticFeedbackIntensity.medium.rawValue
     @AppStorage(AppSettingsKeys.appearanceMode) private var appearanceModeRaw = AppearanceMode.automatic.rawValue
     @AppStorage(AIProviderSettingsKeys.selectedProvider) private var selectedProviderRaw = AIProvider.kimi.rawValue
+    @State private var dueReminderRefreshTask: Task<Void, Never>?
 
     private var appearanceMode: AppearanceMode {
         get { AppearanceMode(rawValue: appearanceModeRaw) ?? .automatic }
@@ -20,6 +25,33 @@ struct SettingsView: View {
 
     private var selectedProvider: AIProvider {
         AIProvider(rawValue: selectedProviderRaw) ?? .kimi
+    }
+
+    private var dueReminderTimeBinding: Binding<Date> {
+        Binding(
+            get: {
+                DueReminderTimeParser.date(from: todoDueReminderTimeRaw)
+                    ?? DueReminderTimeParser.defaultDate
+            },
+            set: { newValue in
+                todoDueReminderTimeRaw = DueReminderTimeParser.string(from: newValue)
+            }
+        )
+    }
+
+    private var todoDueReminderSyncSignatures: [TodoDueReminderSyncSignature] {
+        records.map { record in
+            TodoDueReminderSyncSignature(
+                id: record.id,
+                createdAt: record.createdAt,
+                eventDate: record.eventDate,
+                intent: record.resolvedIntent.rawValue,
+                needTodo: record.needTodo,
+                eventTitle: record.eventTitle ?? "",
+                eventDescription: record.eventDescription ?? "",
+                todoEventsJSON: record.todoEventsJSON
+            )
+        }
     }
 
     var body: some View {
@@ -42,6 +74,22 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle(String(localized: "设置"))
+            .onAppear {
+                scheduleDueReminderRefresh()
+            }
+            .onChange(of: todoDueReminderEnabled) { _, _ in
+                scheduleDueReminderRefresh()
+            }
+            .onChange(of: todoDueReminderTimeRaw) { _, _ in
+                scheduleDueReminderRefresh()
+            }
+            .onChange(of: todoDueReminderSyncSignatures) { _, _ in
+                scheduleDueReminderRefresh()
+            }
+            .onDisappear {
+                dueReminderRefreshTask?.cancel()
+                dueReminderRefreshTask = nil
+            }
         }
     }
 
@@ -154,6 +202,84 @@ struct SettingsView: View {
 
             GlassCard(cornerRadius: 18) {
                 VStack(spacing: 0) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "bell.badge")
+                            .font(.body)
+                            .foregroundStyle(AppTheme.primary)
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(String(localized: "到期提醒"))
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                            Text(String(localized: "当天有待办时，在设定时间推送系统通知"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        Toggle("", isOn: $todoDueReminderEnabled)
+                            .labelsHidden()
+                    }
+                    .padding(.vertical, 20)
+
+                    if todoDueReminderEnabled {
+                        Divider()
+                            .padding(.leading, 36)
+
+                        HStack(spacing: 12) {
+                            Image(systemName: "clock")
+                                .font(.body)
+                                .foregroundStyle(AppTheme.primary)
+                                .frame(width: 24)
+
+                            Text(String(localized: "提醒时间"))
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+
+                            Spacer(minLength: 0)
+
+                            DatePicker(
+                                "",
+                                selection: dueReminderTimeBinding,
+                                displayedComponents: .hourAndMinute
+                            )
+                            .labelsHidden()
+                            .datePickerStyle(.compact)
+                            .environment(\.locale, Locale(identifier: "zh_CN"))
+                        }
+                        .padding(.vertical, 20)
+                    }
+
+                    Divider()
+                        .padding(.leading, 36)
+
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.arrow.trianglehead.clockwise")
+                            .font(.body)
+                            .foregroundStyle(AppTheme.primary)
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(String(localized: "自动添加待办"))
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                            Text(String(localized: "AI 摘要成功后自动加入系统提醒事项"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        Toggle("", isOn: $autoAddTodoAfterAISummary)
+                            .labelsHidden()
+                    }
+                    .padding(.vertical, 20)
+
+                    Divider()
+                        .padding(.leading, 36)
+
                     NavigationLink {
                         AppearanceModeSelectionView(selectedMode: $appearanceModeRaw)
                     } label: {
@@ -181,31 +307,6 @@ struct SettingsView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-
-                    Divider()
-                        .padding(.leading, 36)
-
-                    HStack(spacing: 12) {
-                        Image(systemName: "checkmark.arrow.trianglehead.clockwise")
-                            .font(.body)
-                            .foregroundStyle(AppTheme.primary)
-                            .frame(width: 24)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(String(localized: "自动添加待办"))
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
-                            Text(String(localized: "AI 摘要成功后自动加入系统提醒事项"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer(minLength: 0)
-
-                        Toggle("", isOn: $autoAddTodoAfterAISummary)
-                            .labelsHidden()
-                    }
-                    .padding(.vertical, 20)
 
                     Divider()
                         .padding(.leading, 36)
@@ -262,6 +363,53 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private func scheduleDueReminderRefresh() {
+        dueReminderRefreshTask?.cancel()
+        dueReminderRefreshTask = Task { @MainActor in
+            await TodoDueNotificationScheduler.refresh(for: records)
+            dueReminderRefreshTask = nil
+        }
+    }
+}
+
+private struct TodoDueReminderSyncSignature: Equatable {
+    let id: UUID
+    let createdAt: Date
+    let eventDate: Date?
+    let intent: String
+    let needTodo: Bool
+    let eventTitle: String
+    let eventDescription: String
+    let todoEventsJSON: String
+}
+
+private enum DueReminderTimeParser {
+    private static let formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
+    static let defaultRawValue = "08:00"
+
+    static var defaultDate: Date {
+        date(from: defaultRawValue) ?? .now
+    }
+
+    static func date(from rawValue: String) -> Date? {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.range(of: #"^\d{2}:\d{2}$"#, options: .regularExpression) != nil else {
+            return nil
+        }
+        return formatter.date(from: trimmed)
+    }
+
+    static func string(from date: Date) -> String {
+        formatter.string(from: date)
     }
 }
 

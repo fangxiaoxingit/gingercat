@@ -692,6 +692,7 @@
 		A10000082F862934003682F1 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = gingerCatShareExtension/gingerCatShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -721,6 +722,7 @@
 		A10000092F862934003682F1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = gingerCatShareExtension/gingerCatShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;

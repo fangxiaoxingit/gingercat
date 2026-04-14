@@ -68,6 +68,10 @@ enum BackgroundImageImportPipeline {
         if autoAddResult.addedCount > 0 {
             try? modelContext.save()
         }
+        await refreshDueReminderNotifications(
+            modelContext: modelContext,
+            defaults: defaults
+        )
         if result.isOCRCompleted {
             if result.didAISummaryRequestFail {
                 await OCRCompletionNotifier.notifyAISummaryFailure(record: record)
@@ -98,6 +102,20 @@ enum BackgroundImageImportPipeline {
             return defaultValue
         }
         return defaults.bool(forKey: key)
+    }
+
+    private static func refreshDueReminderNotifications(
+        modelContext: ModelContext,
+        defaults: UserDefaults
+    ) async {
+        let descriptor = FetchDescriptor<ScanRecord>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        let allRecords = (try? modelContext.fetch(descriptor)) ?? []
+        await TodoDueNotificationScheduler.refresh(
+            for: allRecords,
+            defaults: defaults
+        )
     }
 
     private static func autoAddTodoIfNeeded(
