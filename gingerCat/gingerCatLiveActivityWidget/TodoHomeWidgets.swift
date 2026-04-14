@@ -11,9 +11,11 @@ private enum TodoWidgetSharedConfig {
     static let recentTodoWidgetKind = "gingercat.todo.recent.medium"
 
     static let themeColor = Color(
-        red: 52.0 / 255.0,
-        green: 103.0 / 255.0,
-        blue: 57.0 / 255.0
+        uiColor: UIColor { trait in
+            trait.userInterfaceStyle == .dark
+                ? UIColor(red: 83.0 / 255.0, green: 183.0 / 255.0, blue: 98.0 / 255.0, alpha: 1.0)
+                : UIColor(red: 52.0 / 255.0, green: 103.0 / 255.0, blue: 57.0 / 255.0, alpha: 1.0)
+        }
     )
 }
 

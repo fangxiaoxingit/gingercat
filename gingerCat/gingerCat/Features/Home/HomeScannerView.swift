@@ -409,8 +409,8 @@ struct HomeScannerView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(item.title)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(AppTheme.primary)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
                     .lineLimit(2)
 
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -421,7 +421,7 @@ struct HomeScannerView: View {
                     if let remainingDaysText = item.remainingDaysText {
                         Text(remainingDaysText)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(AppTheme.primary)
                     }
                 }
             }
