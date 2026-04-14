@@ -1,7 +1,7 @@
 {
   "images" : [
     {
-      "filename" : "未标题-2.png",
+      "filename" : "logo2.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -13,7 +13,7 @@
           "value" : "dark"
         }
       ],
-      "filename" : "未标题-2_dark.png",
+      "filename" : "logo2_dark.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -25,6 +25,7 @@
           "value" : "tinted"
         }
       ],
+      "filename" : "logo2 1.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
