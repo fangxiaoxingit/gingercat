@@ -4,6 +4,9 @@ import SwiftData
 import UIKit
 import ImageIO
 #endif
+#if canImport(Photos)
+import Photos
+#endif
 
 struct ArchiveDetailView: View {
     @Environment(\.modelContext) private var modelContext
@@ -27,6 +30,7 @@ struct ArchiveDetailView: View {
     @State private var selectedReminderEventKey: String?
     @State private var toastMessage: String?
     @State private var toastDismissTask: Task<Void, Never>?
+    @State private var isShareCardComposerPresented = false
 
     private var hapticsIntensity: HapticFeedbackIntensity {
         HapticFeedbackIntensity(rawValue: hapticsIntensityRaw) ?? .medium
@@ -96,6 +100,17 @@ struct ArchiveDetailView: View {
 
                     Divider()
 
+                    Button {
+                        isShareCardComposerPresented = true
+                    } label: {
+                        Label(
+                            String(localized: "卡片分享"),
+                            systemImage: "square.and.arrow.up.on.square"
+                        )
+                    }
+
+                    Divider()
+
                     Button(role: .destructive) {
                         isDeleteConfirmationPresented = true
                     } label: {
@@ -111,6 +126,12 @@ struct ArchiveDetailView: View {
             if let image = resolvedImage {
                 ArchiveImagePreviewView(image: image, isPresented: $isImagePreviewPresented)
             }
+        }
+        .fullScreenCover(isPresented: $isShareCardComposerPresented) {
+            ArchiveShareCardComposerView(
+                record: record,
+                isPresented: $isShareCardComposerPresented
+            )
         }
         .sheet(isPresented: $isReminderEditorPresented) {
             ReminderDraftEditorView(
@@ -860,6 +881,345 @@ struct ArchiveDetailView: View {
         .padding(.vertical, 4)
     }
 
+}
+
+private struct ArchiveShareCardComposerView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let record: ScanRecord
+    @Binding var isPresented: Bool
+
+    @State private var shareImage: UIImage?
+    @State private var isShareSheetPresented = false
+    @State private var feedback: ShareCardFeedback?
+    @State private var isSavingImage = false
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            ArchiveShareCardCanvasView(
+                appName: appDisplayName,
+                title: shareTitle,
+                content: shareContent
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                topBar
+                Spacer()
+                bottomActions
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 26)
+        }
+        .sheet(isPresented: $isShareSheetPresented) {
+            if let shareImage {
+                ActivityShareSheet(activityItems: [shareImage])
+            }
+        }
+        .alert(item: $feedback) { feedback in
+            Alert(
+                title: Text(feedback.title),
+                message: Text(feedback.message),
+                dismissButton: .default(Text(String(localized: "知道了")))
+            )
+        }
+    }
+
+    private var topBar: some View {
+        HStack {
+            Button(String(localized: "取消")) {
+                isPresented = false
+            }
+            .font(.body.weight(.medium))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: Capsule())
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var bottomActions: some View {
+        HStack(spacing: 26) {
+            Button {
+                shareCardImage()
+            } label: {
+                shareActionLabel(
+                    title: String(localized: "分享"),
+                    systemImage: "square.and.arrow.up"
+                )
+            }
+            .disabled(isSavingImage)
+
+            Button {
+                Task {
+                    await saveCardImageToPhotos()
+                }
+            } label: {
+                if isSavingImage {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(.white)
+                        .frame(width: 28, height: 28)
+                } else {
+                    shareActionLabel(
+                        title: String(localized: "下载"),
+                        systemImage: "arrow.down.to.line"
+                    )
+                }
+            }
+            .disabled(isSavingImage)
+        }
+        .padding(.horizontal, 26)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial, in: Capsule())
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private func shareActionLabel(title: String, systemImage: String) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.system(size: 22, weight: .semibold))
+            Text(title)
+                .font(.footnote.weight(.semibold))
+        }
+        .foregroundStyle(.white)
+        .frame(width: 58, height: 52)
+    }
+
+    private var appDisplayName: String {
+        if let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String,
+           displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            return displayName
+        }
+        if let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String,
+           appName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            return appName
+        }
+        return String(localized: "大橘小事")
+    }
+
+    private var shareTitle: String {
+        let eventTitle = (record.eventTitle ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if eventTitle.isEmpty == false {
+            return eventTitle
+        }
+
+        let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if summary.isEmpty == false {
+            return String(summary.prefix(32))
+        }
+
+        return String(localized: "识别记录")
+    }
+
+    private var shareContent: String {
+        let description = (record.eventDescription ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if description.isEmpty == false, description != shareTitle {
+            return description
+        }
+
+        let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if summary.isEmpty == false {
+            return summary
+        }
+
+        let recognizedText = record.recognizedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if recognizedText.isEmpty == false {
+            return recognizedText
+        }
+
+        return String(localized: "暂无详细内容")
+    }
+
+    private func shareCardImage() {
+        guard let image = renderedCardImage() else {
+            feedback = ShareCardFeedback(
+                title: String(localized: "分享失败"),
+                message: String(localized: "卡片渲染失败，请稍后重试。")
+            )
+            return
+        }
+        shareImage = image
+        isShareSheetPresented = true
+    }
+
+    private func saveCardImageToPhotos() async {
+        guard isSavingImage == false else { return }
+        isSavingImage = true
+        defer { isSavingImage = false }
+
+        guard let image = renderedCardImage() else {
+            feedback = ShareCardFeedback(
+                title: String(localized: "保存失败"),
+                message: String(localized: "卡片渲染失败，请稍后重试。")
+            )
+            return
+        }
+
+        do {
+            try await ShareCardPhotoLibrarySaver.save(image: image)
+            feedback = ShareCardFeedback(
+                title: String(localized: "保存成功"),
+                message: String(localized: "卡片已保存到系统相册。")
+            )
+        } catch {
+            feedback = ShareCardFeedback(
+                title: String(localized: "保存失败"),
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    @MainActor
+    private func renderedCardImage() -> UIImage? {
+        let renderView = ArchiveShareCardCanvasView(
+            appName: appDisplayName,
+            title: shareTitle,
+            content: shareContent
+        )
+        .frame(width: 1080, height: 1440)
+        .environment(\.colorScheme, colorScheme)
+
+        let renderer = ImageRenderer(content: renderView)
+        renderer.scale = 1
+        return renderer.uiImage
+    }
+}
+
+private struct ArchiveShareCardCanvasView: View {
+    let appName: String
+    let title: String
+    let content: String
+
+    var body: some View {
+        GeometryReader { proxy in
+            let widthScale = max(proxy.size.width / 390, 0.85)
+            let topPadding = 20 * widthScale
+            let horizontalPadding = 30 * widthScale
+            let appNameSize = 20 * widthScale
+            let titleSize = 30 * widthScale
+            let contentSize = 16 * widthScale
+
+            ZStack {
+                AppTheme.primary
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(appName)
+                        .font(.system(size: appNameSize, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.55))
+
+                    Spacer(minLength: 20 * widthScale)
+
+                    Text(title)
+                        .font(.system(size: titleSize, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .lineLimit(4)
+                        .minimumScaleFactor(0.68)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 20 * widthScale)
+
+                    Text(content)
+                        .font(.system(size: contentSize, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .lineSpacing(4 * widthScale)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .lineLimit(6)
+                        .minimumScaleFactor(0.74)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.top, topPadding)
+                .padding(.horizontal, horizontalPadding)
+                .padding(.bottom, 48 * widthScale)
+            }
+        }
+    }
+}
+
+private struct ActivityShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(
+            activityItems: activityItems,
+            applicationActivities: nil
+        )
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+private struct ShareCardFeedback: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
+private enum ShareCardPhotoLibrarySaver {
+    static func save(image: UIImage) async throws {
+        let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+        let resolvedStatus: PHAuthorizationStatus
+
+        switch status {
+        case .authorized, .limited:
+            resolvedStatus = status
+        case .notDetermined:
+            resolvedStatus = await requestPhotoAuthorization()
+        case .restricted, .denied:
+            throw ShareCardSaveError.permissionDenied
+        @unknown default:
+            throw ShareCardSaveError.permissionDenied
+        }
+
+        guard resolvedStatus == .authorized || resolvedStatus == .limited else {
+            throw ShareCardSaveError.permissionDenied
+        }
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            PHPhotoLibrary.shared().performChanges({
+                PHAssetChangeRequest.creationRequestForAsset(from: image)
+            }, completionHandler: { success, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                if success {
+                    continuation.resume(returning: ())
+                } else {
+                    continuation.resume(throwing: ShareCardSaveError.saveFailed)
+                }
+            })
+        }
+    }
+
+    private static func requestPhotoAuthorization() async -> PHAuthorizationStatus {
+        await withCheckedContinuation { continuation in
+            PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+                continuation.resume(returning: status)
+            }
+        }
+    }
+}
+
+private enum ShareCardSaveError: LocalizedError {
+    case permissionDenied
+    case saveFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .permissionDenied:
+            return String(localized: "没有相册写入权限，请在系统设置中允许后重试。")
+        case .saveFailed:
+            return String(localized: "保存到相册失败，请稍后重试。")
+        }
+    }
 }
 
 #Preview {
