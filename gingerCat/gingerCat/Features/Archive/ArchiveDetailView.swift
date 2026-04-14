@@ -222,7 +222,7 @@ struct ArchiveDetailView: View {
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(.ultraThinMaterial, in: Capsule())
+                            .glassBadgeStyle()
                             .padding(12)
                     }
                     .frame(maxWidth: .infinity, minHeight: 120, maxHeight: 120)
@@ -889,18 +889,24 @@ private struct ArchiveShareCardComposerView: View {
     let record: ScanRecord
     @Binding var isPresented: Bool
 
-    @State private var shareImage: UIImage?
-    @State private var isShareSheetPresented = false
+    @State private var shareImage: ShareableImage?
     @State private var feedback: ShareCardFeedback?
     @State private var isSavingImage = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            ArchiveShareCardCanvasView(
-                appName: appDisplayName,
-                title: shareTitle,
-                content: shareContent
-            )
+            GeometryReader { proxy in
+                let cardWidth = min(proxy.size.width * 0.9, 390)
+                let cardHeight = cardWidth * 4 / 3
+
+                ArchiveShareCardCanvasView(
+                    appName: appDisplayName,
+                    title: shareTitle,
+                    content: shareContent
+                )
+                .frame(width: cardWidth, height: cardHeight)
+                .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+            }
             .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -912,10 +918,8 @@ private struct ArchiveShareCardComposerView: View {
             .padding(.top, 10)
             .padding(.bottom, 26)
         }
-        .sheet(isPresented: $isShareSheetPresented) {
-            if let shareImage {
-                ActivityShareSheet(activityItems: [shareImage])
-            }
+        .sheet(item: $shareImage) { shareableImage in
+            ActivityShareSheet(activityItems: [shareableImage.image])
         }
         .alert(item: $feedback) { feedback in
             Alert(
@@ -932,49 +936,51 @@ private struct ArchiveShareCardComposerView: View {
                 isPresented = false
             }
             .font(.body.weight(.medium))
-            .foregroundStyle(.white)
+            .foregroundStyle(.primary)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: Capsule())
+            .glassButtonStyle()
 
             Spacer(minLength: 0)
         }
     }
 
     private var bottomActions: some View {
-        HStack(spacing: 26) {
-            Button {
-                shareCardImage()
-            } label: {
-                shareActionLabel(
-                    title: String(localized: "分享"),
-                    systemImage: "square.and.arrow.up"
-                )
-            }
-            .disabled(isSavingImage)
-
-            Button {
-                Task {
-                    await saveCardImageToPhotos()
-                }
-            } label: {
-                if isSavingImage {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .tint(.white)
-                        .frame(width: 28, height: 28)
-                } else {
+        GlassEffectContainer(spacing: 26) {
+            HStack(spacing: 26) {
+                Button {
+                    shareCardImage()
+                } label: {
                     shareActionLabel(
-                        title: String(localized: "下载"),
-                        systemImage: "arrow.down.to.line"
+                        title: String(localized: "分享"),
+                        systemImage: "square.and.arrow.up"
                     )
                 }
+                .disabled(isSavingImage)
+
+                Button {
+                    Task {
+                        await saveCardImageToPhotos()
+                    }
+                } label: {
+                    if isSavingImage {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(.primary)
+                            .frame(width: 28, height: 28)
+                    } else {
+                        shareActionLabel(
+                            title: String(localized: "下载"),
+                            systemImage: "arrow.down.to.line"
+                        )
+                    }
+                }
+                .disabled(isSavingImage)
             }
-            .disabled(isSavingImage)
+            .padding(.horizontal, 26)
+            .padding(.vertical, 12)
         }
-        .padding(.horizontal, 26)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial, in: Capsule())
+        .glassContainerStyle()
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
@@ -985,7 +991,7 @@ private struct ArchiveShareCardComposerView: View {
             Text(title)
                 .font(.footnote.weight(.semibold))
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(.primary)
         .frame(width: 58, height: 52)
     }
 
@@ -1042,8 +1048,7 @@ private struct ArchiveShareCardComposerView: View {
             )
             return
         }
-        shareImage = image
-        isShareSheetPresented = true
+        shareImage = ShareableImage(image: image)
     }
 
     private func saveCardImageToPhotos() async {
@@ -1161,6 +1166,11 @@ private struct ShareCardFeedback: Identifiable {
     let message: String
 }
 
+private struct ShareableImage: Identifiable {
+    let id = UUID()
+    let image: UIImage
+}
+
 private enum ShareCardPhotoLibrarySaver {
     static func save(image: UIImage) async throws {
         let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
@@ -1228,6 +1238,63 @@ private enum ShareCardSaveError: LocalizedError {
     }
 }
 
+// MARK: - Liquid Glass Extensions
+
+private extension View {
+    @ViewBuilder
+    func glassButtonStyle() -> some View {
+        if #available(iOS 26, *) {
+            self
+                .glassEffect(.regular.interactive(), in: .capsule)
+        } else {
+            self
+                .background(
+                    Color.primary.opacity(0.1),
+                    in: Capsule()
+                )
+        }
+    }
+
+    @ViewBuilder
+    func glassContainerStyle() -> some View {
+        if #available(iOS 26, *) {
+            self
+                .glassEffect(.regular, in: .capsule)
+        } else {
+            self
+                .background(
+                    Color.primary.opacity(0.1),
+                    in: Capsule()
+                )
+        }
+    }
+
+    @ViewBuilder
+    func glassBadgeStyle() -> some View {
+        if #available(iOS 26, *) {
+            self
+                .glassEffect(.regular, in: .capsule)
+        } else {
+            self
+                .background(.ultraThinMaterial, in: Capsule())
+        }
+    }
+
+    @ViewBuilder
+    func glassCloseButtonStyle() -> some View {
+        if #available(iOS 26, *) {
+            self
+                .glassEffect(.regular.interactive(), in: .circle)
+        } else {
+            self
+                .background(
+                    Color.white.opacity(0.2),
+                    in: Circle()
+                )
+        }
+    }
+}
+
 private struct ArchiveImagePreviewView: View {
     let image: UIImage
     @Binding var isPresented: Bool
@@ -1280,13 +1347,22 @@ private struct ArchiveImagePreviewView: View {
                     .contentShape(Rectangle())
             }
 
-            Button {
-                isPresented = false
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .padding(20)
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        isPresented = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                    }
+                    .glassCloseButtonStyle()
+                    .padding(.top, 16)
+                    .padding(.trailing, 16)
+                }
+                Spacer()
             }
         }
     }
