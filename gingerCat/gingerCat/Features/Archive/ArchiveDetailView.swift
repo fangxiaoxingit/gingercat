@@ -1311,21 +1311,21 @@ enum ShareCardColorDataSource {
     /// 日落橙
     static let sunsetOrange = ShareCardColor(
         id: "sunsetOrange",
-        hex: "#dc5400ff",
+        hex: "#dc5400",
         displayName: "日落橙"
     )
 
     /// 深紫
     static let deepPurple = ShareCardColor(
         id: "deepPurple",
-        hex: "#4b18abff",
+        hex: "#4b18ab",
         displayName: "深紫"
     )
 
     /// 黄色
     static let mintGreen = ShareCardColor(
         id: "mintGreen",
-        hex: "#FCC737",
+        hex: "#e3b32f",
         displayName: "薄荷绿"
     )
 
