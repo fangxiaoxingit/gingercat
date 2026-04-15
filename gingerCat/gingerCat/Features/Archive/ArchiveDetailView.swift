@@ -906,6 +906,7 @@ private struct ArchiveShareCardComposerView: View {
                 )
                 .frame(width: cardWidth, height: cardHeight)
                 .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                .environment(\.colorScheme, .light)
             }
             .ignoresSafeArea()
 
@@ -1086,7 +1087,8 @@ private struct ArchiveShareCardComposerView: View {
             content: shareContent
         )
         .frame(width: 1080, height: 1440)
-        .environment(\.colorScheme, colorScheme)
+        // 固定使用浅色模式，确保生成的图片外观一致
+        .environment(\.colorScheme, .light)
 
         let renderer = ImageRenderer(content: renderView)
         renderer.scale = 1
@@ -1109,7 +1111,8 @@ private struct ArchiveShareCardCanvasView: View {
             let contentSize = 16 * widthScale
 
             ZStack {
-                AppTheme.primary
+                // 固定使用浅色模式主色调，确保不同外观模式下生成的图片一致
+                Color(hex: "#346739")
 
                 VStack(alignment: .leading, spacing: 0) {
                     Text(appName)
