@@ -892,6 +892,9 @@ private struct ArchiveShareCardComposerView: View {
     @State private var shareImage: ShareableImage?
     @State private var feedback: ShareCardFeedback?
     @State private var isSavingImage = false
+    @State private var selectedCardColor: ShareCardColor = ShareCardColorDataSource.defaultColor
+
+    private let cardColors: [ShareCardColor] = ShareCardColorDataSource.allColors
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -902,21 +905,29 @@ private struct ArchiveShareCardComposerView: View {
                 ArchiveShareCardCanvasView(
                     appName: appDisplayName,
                     title: shareTitle,
-                    content: shareContent
+                    content: shareContent,
+                    backgroundColor: selectedCardColor.color
                 )
                 .frame(width: cardWidth, height: cardHeight)
-                .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                .position(x: proxy.size.width / 2, y: proxy.size.height / 2 - 10)
                 .environment(\.colorScheme, .light)
             }
             .ignoresSafeArea()
 
+            // 顶部标题和关闭按钮
             VStack(spacing: 0) {
-                topBar
+                titleBar
                 Spacer()
-                bottomActions
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.top, 16)
+
+            // 底部颜色选择器和按钮组
+            VStack(spacing: 16) {
+                colorPickerBar
+                bottomActionBar
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             .padding(.bottom, 26)
         }
         .sheet(item: $shareImage) { shareableImage in
@@ -931,34 +942,66 @@ private struct ArchiveShareCardComposerView: View {
         }
     }
 
-    private var topBar: some View {
+    private var titleBar: some View {
         HStack {
-            Button(String(localized: "取消")) {
-                isPresented = false
-            }
-            .font(.body.weight(.medium))
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .glassButtonStyle()
+            // 左侧占位，保持居中
+            Spacer()
+                .frame(width: 44)
 
-            Spacer(minLength: 0)
+            Spacer()
+
+            // 中间标题
+            Text(String(localized: "分享预览"))
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+
+            Spacer()
+
+            // 右侧关闭按钮
+            Button {
+                isPresented = false
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 44, height: 44)
+            }
+            .glassCloseButtonStyle()
         }
+        .padding(.horizontal, 18)
     }
 
-    private var bottomActions: some View {
-        GlassEffectContainer(spacing: 26) {
-            HStack(spacing: 26) {
+    private var colorPickerBar: some View {
+        HStack(spacing: 12) {
+            ForEach(cardColors, id: \.self) { color in
                 Button {
-                    shareCardImage()
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        selectedCardColor = color
+                    }
                 } label: {
-                    shareActionLabel(
-                        title: String(localized: "分享"),
-                        systemImage: "square.and.arrow.up"
-                    )
+                    Circle()
+                        .fill(color.color)
+                        .frame(width: selectedCardColor == color ? 36 : 30,
+                               height: selectedCardColor == color ? 36 : 30)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.5), lineWidth: selectedCardColor == color ? 2 : 0)
+                        )
+                        .shadow(color: Color.black.opacity(0.15), radius: 2, x: 0, y: 1)
                 }
-                .disabled(isSavingImage)
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .glassContainerStyle()
+    }
 
+    private var bottomActionBar: some View {
+        // 中间按钮组：下载 | 分享
+        GlassEffectContainer(spacing: 0) {
+            HStack(spacing: 0) {
+                // 下载按钮
                 Button {
                     Task {
                         await saveCardImageToPhotos()
@@ -968,32 +1011,34 @@ private struct ArchiveShareCardComposerView: View {
                         ProgressView()
                             .progressViewStyle(.circular)
                             .tint(.primary)
-                            .frame(width: 28, height: 28)
+                            .frame(width: 22, height: 22)
                     } else {
-                        shareActionLabel(
-                            title: String(localized: "下载"),
-                            systemImage: "arrow.down.to.line"
-                        )
+                        Image(systemName: "arrow.down.to.line")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(.primary)
                     }
                 }
                 .disabled(isSavingImage)
+                .frame(width: 62, height: 50)
+
+                // 分隔线
+                Divider()
+                    .frame(width: 1, height: 26)
+
+                // 分享按钮
+                Button {
+                    shareCardImage()
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 62, height: 50)
+                }
+                .disabled(isSavingImage)
             }
-            .padding(.horizontal, 26)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 10)
         }
         .glassContainerStyle()
-        .frame(maxWidth: .infinity, alignment: .center)
-    }
-
-    private func shareActionLabel(title: String, systemImage: String) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.system(size: 22, weight: .semibold))
-            Text(title)
-                .font(.footnote.weight(.semibold))
-        }
-        .foregroundStyle(.primary)
-        .frame(width: 58, height: 52)
     }
 
     private var appDisplayName: String {
@@ -1084,7 +1129,8 @@ private struct ArchiveShareCardComposerView: View {
         let renderView = ArchiveShareCardCanvasView(
             appName: appDisplayName,
             title: shareTitle,
-            content: shareContent
+            content: shareContent,
+            backgroundColor: selectedCardColor.color
         )
         .frame(width: 1080, height: 1440)
         // 固定使用浅色模式，确保生成的图片外观一致
@@ -1100,6 +1146,7 @@ private struct ArchiveShareCardCanvasView: View {
     let appName: String
     let title: String
     let content: String
+    let backgroundColor: Color
 
     var body: some View {
         GeometryReader { proxy in
@@ -1111,8 +1158,8 @@ private struct ArchiveShareCardCanvasView: View {
             let contentSize = 16 * widthScale
 
             ZStack {
-                // 固定使用浅色模式主色调，确保不同外观模式下生成的图片一致
-                Color(hex: "#346739")
+                // 使用选中的背景色
+                backgroundColor
 
                 VStack(alignment: .leading, spacing: 0) {
                     Text(appName)
@@ -1232,6 +1279,95 @@ private enum ShareCardSaveError: LocalizedError {
         case .saveFailed:
             return String(localized: "保存到相册失败，请稍后重试。")
         }
+    }
+}
+
+// MARK: - Share Card Color
+
+/// 分享卡片颜色数据源
+/// 集中管理所有可选颜色，方便后期添加或修改
+enum ShareCardColorDataSource {
+    /// 森林绿 - 默认颜色
+    static let forestGreen = ShareCardColor(
+        id: "forestGreen",
+        hex: "#346739",
+        displayName: "森林绿"
+    )
+
+    /// 海洋蓝
+    static let oceanBlue = ShareCardColor(
+        id: "oceanBlue",
+        hex: "#344CB7",
+        displayName: "海洋蓝"
+    )
+
+    /// 珊瑚红
+    static let coralRed = ShareCardColor(
+        id: "coralRed",
+        hex: "#A31D1D",
+        displayName: "珊瑚红"
+    )
+
+    /// 日落橙
+    static let sunsetOrange = ShareCardColor(
+        id: "sunsetOrange",
+        hex: "#dc5400ff",
+        displayName: "日落橙"
+    )
+
+    /// 深紫
+    static let deepPurple = ShareCardColor(
+        id: "deepPurple",
+        hex: "#4b18abff",
+        displayName: "深紫"
+    )
+
+    /// 黄色
+    static let mintGreen = ShareCardColor(
+        id: "mintGreen",
+        hex: "#FCC737",
+        displayName: "薄荷绿"
+    )
+
+    /// 石板灰
+    static let slateGray = ShareCardColor(
+        id: "slateGray",
+        hex: "#29292f",
+        displayName: "石板灰"
+    )
+
+    /// 所有颜色数组
+    static var allColors: [ShareCardColor] {
+        [
+            forestGreen,
+            oceanBlue,
+            coralRed,
+            sunsetOrange,
+            deepPurple,
+            mintGreen,
+            slateGray
+        ]
+    }
+
+    /// 默认颜色
+    static var defaultColor: ShareCardColor {
+        forestGreen
+    }
+
+    /// 根据 ID 查找颜色
+    static func color(withId id: String) -> ShareCardColor? {
+        allColors.first { $0.id == id }
+    }
+}
+
+/// 分享卡片颜色模型
+struct ShareCardColor: Identifiable, Equatable, Hashable {
+    let id: String
+    let hex: String
+    let displayName: String
+
+    var color: Color {
+        Color(hex: hex)
     }
 }
 
