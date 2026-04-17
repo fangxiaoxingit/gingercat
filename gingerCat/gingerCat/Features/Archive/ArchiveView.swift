@@ -227,8 +227,8 @@ private enum ArchiveRecordFilter: CaseIterable {
     case all
     case notAdded
     case added
-    case expired
     case notExpired
+    case expired
     case recent7Days
     case recentMonth
 
