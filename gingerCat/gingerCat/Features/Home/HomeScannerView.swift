@@ -555,6 +555,7 @@ struct HomeScannerView: View {
 
     private var pendingTodos: [PendingTodoItem] {
         let now = Date()
+        let calendar = Calendar.current
         let todoRecords = records
             .filter { record in
                 let isTodo = record.needTodo || record.resolvedIntent == .schedule
@@ -563,7 +564,7 @@ struct HomeScannerView: View {
                 }
 
                 if let eventDate = record.eventDate {
-                    return eventDate > now
+                    return calendar.isDate(eventDate, inSameDayAs: now) || eventDate > now
                 }
                 return true
             }
@@ -609,13 +610,13 @@ struct HomeScannerView: View {
         }
 
         let now = Date()
-        guard eventDate > now else {
-            return nil
-        }
-
         let calendar = Calendar.current
         if calendar.isDate(eventDate, inSameDayAs: now) {
             return String(localized: "今天到期")
+        }
+
+        guard eventDate > now else {
+            return nil
         }
 
         let currentDay = calendar.startOfDay(for: now)

@@ -130,6 +130,10 @@ struct ArchiveView: View {
                 return isTodoRecord(record) && hasAddedReminder(record) == false
             case .added:
                 return isTodoRecord(record) && hasAddedReminder(record)
+            case .expired:
+                return isExpiredTodoRecord(record, now: now, calendar: calendar)
+            case .notExpired:
+                return isNotExpiredTodoRecord(record, now: now, calendar: calendar)
             case .recent7Days:
                 guard let startDate = calendar.date(byAdding: .day, value: -7, to: now) else {
                     return true
@@ -166,6 +170,39 @@ struct ArchiveView: View {
         return record.hasAddedTodoReminder
     }
 
+    private func isExpiredTodoRecord(_ record: ScanRecord, now: Date, calendar: Calendar) -> Bool {
+        guard isTodoRecord(record) else { return false }
+        let dueDates = todoDueDates(for: record)
+        guard dueDates.isEmpty == false else { return false }
+        let todayStart = calendar.startOfDay(for: now)
+        return dueDates.allSatisfy { $0 < todayStart }
+    }
+
+    private func isNotExpiredTodoRecord(_ record: ScanRecord, now: Date, calendar: Calendar) -> Bool {
+        guard isTodoRecord(record) else { return false }
+        let dueDates = todoDueDates(for: record)
+        guard dueDates.isEmpty == false else { return false }
+        let todayStart = calendar.startOfDay(for: now)
+        return dueDates.contains { $0 >= todayStart }
+    }
+
+    private func todoDueDates(for record: ScanRecord) -> [Date] {
+        let eventDates = record.todoEvents
+            .filter(\.needTodo)
+            .map(\.date)
+
+        if eventDates.isEmpty == false {
+            return eventDates.sorted()
+        }
+
+        if record.needTodo || record.resolvedIntent == .schedule,
+           let eventDate = record.eventDate {
+            return [eventDate]
+        }
+
+        return []
+    }
+
     private func delete(_ record: ScanRecord) {
         withAnimation {
             modelContext.delete(record)
@@ -190,6 +227,8 @@ private enum ArchiveRecordFilter: CaseIterable {
     case all
     case notAdded
     case added
+    case expired
+    case notExpired
     case recent7Days
     case recentMonth
 
@@ -201,6 +240,10 @@ private enum ArchiveRecordFilter: CaseIterable {
             return String(localized: "未添加")
         case .added:
             return String(localized: "已添加")
+        case .notExpired:
+            return String(localized: "未过期")
+        case .expired:
+            return String(localized: "已过期")
         case .recent7Days:
             return String(localized: "最近 7 天")
         case .recentMonth:
