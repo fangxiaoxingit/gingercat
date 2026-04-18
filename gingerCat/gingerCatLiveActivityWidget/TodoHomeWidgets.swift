@@ -160,10 +160,10 @@ private struct LatestTodoSquareWidgetView: View {
         )
         .clipShape(
             UnevenRoundedRectangle(
-                topLeadingRadius: 12,
+                topLeadingRadius: 0,
                 bottomLeadingRadius: 0,
                 bottomTrailingRadius: 0,
-                topTrailingRadius: 12
+                topTrailingRadius: 0
             )
         )
     }
