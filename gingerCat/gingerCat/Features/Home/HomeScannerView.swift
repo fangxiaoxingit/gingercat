@@ -719,18 +719,32 @@ struct HomeScannerView: View {
             return
         }
 
+        let pickupCodes = PickupCodeExtractor.extract(from: cleanedText)
+        let primaryPickupCode = pickupCodes.first
+        let summary = primaryPickupCode?.summaryText ?? cleanedText
+        let detailDescription: String?
+        if pickupCodes.isEmpty {
+            detailDescription = cleanedText
+        } else {
+            detailDescription = pickupCodes.map(\.summaryText).joined(separator: "；")
+        }
+
         let record = ScanRecord(
             summaryUpdatedAt: .now,
             summaryModelName: String(localized: "本地摘要"),
             imageData: imageData,
             source: source,
             recognizedText: cleanedText,
-            summary: cleanedText,
-            intent: .summary,
+            summary: summary,
+            intent: primaryPickupCode == nil ? .summary : .pickup,
+            eventTitle: primaryPickupCode?.summaryText,
+            eventKeywordsText: primaryPickupCode.map { $0.category.fallbackDisplayName } ?? "",
+            eventDescription: detailDescription,
             note: "",
             isOCRCompleted: true,
             usedAISummary: false
         )
+        record.pickupCodes = pickupCodes
         modelContext.insert(record)
         try? modelContext.save()
         showToast(String(localized: "图片已自动解析并加入记录。"), duration: 2_600_000_000)
@@ -894,7 +908,8 @@ struct HomeScannerView: View {
                 aiFallbackMessage: nil,
                 didAISummaryRequestFail: false,
                 summaryModelName: nil,
-                todoEvents: []
+                todoEvents: [],
+                pickupCodes: []
             )
         }
         #else
@@ -914,7 +929,8 @@ struct HomeScannerView: View {
             aiFallbackMessage: nil,
             didAISummaryRequestFail: false,
             summaryModelName: nil,
-            todoEvents: []
+            todoEvents: [],
+            pickupCodes: []
         )
         #endif
 
@@ -976,7 +992,8 @@ struct HomeScannerView: View {
                 aiFallbackMessage: nil,
                 didAISummaryRequestFail: false,
                 summaryModelName: nil,
-                todoEvents: []
+                todoEvents: [],
+                pickupCodes: []
             )
         } catch VisionOCRServiceError.invalidImage {
             return OCRPipelineResult(
@@ -995,7 +1012,8 @@ struct HomeScannerView: View {
                 aiFallbackMessage: nil,
                 didAISummaryRequestFail: false,
                 summaryModelName: nil,
-                todoEvents: []
+                todoEvents: [],
+                pickupCodes: []
             )
         } catch {
             return OCRPipelineResult(
@@ -1014,7 +1032,8 @@ struct HomeScannerView: View {
                 aiFallbackMessage: nil,
                 didAISummaryRequestFail: false,
                 summaryModelName: nil,
-                todoEvents: []
+                todoEvents: [],
+                pickupCodes: []
             )
         }
     }
@@ -1033,11 +1052,15 @@ struct HomeScannerView: View {
         record.eventDescription = result.eventDescription
         record.needTodo = result.needTodo
         record.todoEvents = result.todoEvents
+        record.pickupCodes = result.pickupCodes
         if result.todoEvents.isEmpty == false {
             let validKeys = Set(result.todoEvents.map(\.key))
             let retainedKeys = record.addedTodoEventKeys.intersection(validKeys)
             record.addedTodoEventKeys = retainedKeys
             record.hasAddedTodoReminder = retainedKeys.isEmpty == false
+        } else {
+            record.addedTodoEventKeys = []
+            record.hasAddedTodoReminder = false
         }
         record.isOCRCompleted = result.isOCRCompleted
         record.usedAISummary = result.usedAISummary
@@ -1056,7 +1079,7 @@ struct HomeScannerView: View {
             playSuccessHaptic()
             Task { @MainActor in
                 let autoAddedTodoCount = await autoAddTodoIfNeeded(for: record, result: result)
-                if result.didAISummaryRequestFail {
+                if result.didAISummaryRequestFail, result.intent != .pickup {
                     await OCRCompletionNotifier.notifyAISummaryFailure(record: record)
                 } else {
                     await OCRCompletionNotifier.notify(
@@ -1072,6 +1095,9 @@ struct HomeScannerView: View {
 
     @MainActor
     private func autoAddTodoIfNeeded(for record: ScanRecord, result: OCRPipelineResult) async -> Int {
+        guard result.intent != .pickup else {
+            return 0
+        }
         guard result.usedAISummary else {
             return 0
         }
@@ -1257,6 +1283,30 @@ struct HomeScannerView: View {
         lineBoxes: [OCRLineBox],
         summaryModelName: String
     ) -> OCRPipelineResult {
+        let pickupCodes = buildPickupCodes(from: insight, rawText: recognizedText)
+        if let primaryPickupCode = pickupCodes.first {
+            let summary = primaryPickupCode.summaryText
+            return OCRPipelineResult(
+                recognizedText: recognizedText,
+                summary: summary,
+                intent: .pickup,
+                eventTitle: summary,
+                eventDate: nil,
+                eventTime: nil,
+                eventKeywords: [primaryPickupCode.category.fallbackDisplayName],
+                eventDescription: pickupDescriptionText(for: pickupCodes),
+                needTodo: false,
+                isOCRCompleted: true,
+                usedAISummary: true,
+                lineBoxes: lineBoxes,
+                aiFallbackMessage: nil,
+                didAISummaryRequestFail: false,
+                summaryModelName: summaryModelName,
+                todoEvents: [],
+                pickupCodes: pickupCodes
+            )
+        }
+
         // AI 未返回摘要时，直接回落到 OCR 原文，避免恢复已删除的本地摘要逻辑。
         let resolvedSummary = insight.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? ocrFallbackText
@@ -1297,7 +1347,8 @@ struct HomeScannerView: View {
             aiFallbackMessage: nil,
             didAISummaryRequestFail: false,
             summaryModelName: summaryModelName,
-            todoEvents: todoEvents
+            todoEvents: todoEvents,
+            pickupCodes: []
         )
     }
 
@@ -1309,6 +1360,30 @@ struct HomeScannerView: View {
         summaryModelName: String? = nil
     ) -> OCRPipelineResult {
         let resolvedText = payload.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pickupCodes = PickupCodeExtractor.extract(from: resolvedText)
+        if let primaryPickupCode = pickupCodes.first {
+            let summary = primaryPickupCode.summaryText
+            return OCRPipelineResult(
+                recognizedText: resolvedText,
+                summary: summary,
+                intent: .pickup,
+                eventTitle: summary,
+                eventDate: nil,
+                eventTime: nil,
+                eventKeywords: [primaryPickupCode.category.fallbackDisplayName],
+                eventDescription: pickupDescriptionText(for: pickupCodes),
+                needTodo: false,
+                isOCRCompleted: true,
+                usedAISummary: false,
+                lineBoxes: lineBoxes,
+                aiFallbackMessage: aiFallbackMessage,
+                didAISummaryRequestFail: didAISummaryRequestFail,
+                summaryModelName: summaryModelName,
+                todoEvents: [],
+                pickupCodes: pickupCodes
+            )
+        }
+
         let eventDescription = resolvedText.isEmpty ? nil : resolvedText
 
         // 本地分支只同步 OCR 文本，事件结构化信息统一留给 AI 摘要阶段生成。
@@ -1328,7 +1403,8 @@ struct HomeScannerView: View {
             aiFallbackMessage: aiFallbackMessage,
             didAISummaryRequestFail: didAISummaryRequestFail,
             summaryModelName: summaryModelName,
-            todoEvents: []
+            todoEvents: [],
+            pickupCodes: []
         )
     }
 
@@ -1358,6 +1434,37 @@ struct HomeScannerView: View {
         .sorted { lhs, rhs in
             lhs.date < rhs.date
         }
+    }
+
+    private func buildPickupCodes(from insight: AIOCRInsight, rawText: String) -> [ScanPickupCode] {
+        var normalized: [ScanPickupCode] = insight.pickupItems.compactMap { item in
+            ScanPickupCode(
+                code: item.code,
+                category: item.category,
+                merchantName: item.merchantName,
+                displayName: item.displayName,
+                source: "ai",
+                priority: item.priority
+            )
+        }.filter { $0.code.isEmpty == false }
+
+        if normalized.isEmpty {
+            normalized = PickupCodeExtractor.extract(from: rawText)
+        }
+        return normalized.sorted { lhs, rhs in
+            let leftPriority = lhs.priority ?? Int.max
+            let rightPriority = rhs.priority ?? Int.max
+            if leftPriority != rightPriority {
+                return leftPriority < rightPriority
+            }
+            return lhs.code < rhs.code
+        }
+    }
+
+    private func pickupDescriptionText(for pickupCodes: [ScanPickupCode]) -> String {
+        pickupCodes
+            .map(\.summaryText)
+            .joined(separator: "；")
     }
 
     private func parsedEventDate(date: String?, time: String) -> Date? {
@@ -1450,6 +1557,7 @@ private struct OCRPipelineResult {
     let didAISummaryRequestFail: Bool
     let summaryModelName: String?
     let todoEvents: [ScanTodoEvent]
+    let pickupCodes: [ScanPickupCode]
 }
 
 private struct PendingAddConfirmationSheet: View {

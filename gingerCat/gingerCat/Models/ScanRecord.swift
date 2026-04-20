@@ -4,6 +4,7 @@ import SwiftData
 enum ScanIntent: String, CaseIterable, Codable {
     case schedule
     case summary
+    case pickup
 }
 
 @Model
@@ -30,6 +31,7 @@ final class ScanRecord {
     var hasAddedTodoReminder: Bool = false
     var todoEventsJSON: String = ""
     var addedTodoEventKeysJSON: String = ""
+    var pickupCodesJSON: String = ""
 
     init(
         id: UUID = UUID(),
@@ -53,7 +55,8 @@ final class ScanRecord {
         ocrLineBoxesJSON: String = "",
         hasAddedTodoReminder: Bool = false,
         todoEventsJSON: String = "",
-        addedTodoEventKeysJSON: String = ""
+        addedTodoEventKeysJSON: String = "",
+        pickupCodesJSON: String = ""
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -77,6 +80,7 @@ final class ScanRecord {
         self.hasAddedTodoReminder = hasAddedTodoReminder
         self.todoEventsJSON = todoEventsJSON
         self.addedTodoEventKeysJSON = addedTodoEventKeysJSON
+        self.pickupCodesJSON = pickupCodesJSON
     }
 
     var resolvedIntent: ScanIntent {
@@ -145,6 +149,35 @@ extension ScanRecord {
             }
             addedTodoEventKeysJSON = value
         }
+    }
+
+    var pickupCodes: [ScanPickupCode] {
+        get {
+            guard let data = pickupCodesJSON.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([ScanPickupCode].self, from: data) else {
+                return []
+            }
+            return decoded
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue),
+                  let value = String(data: data, encoding: .utf8) else {
+                pickupCodesJSON = ""
+                return
+            }
+            pickupCodesJSON = value
+        }
+    }
+
+    var primaryPickupCode: ScanPickupCode? {
+        pickupCodes.sorted { lhs, rhs in
+            let leftPriority = lhs.priority ?? Int.max
+            let rightPriority = rhs.priority ?? Int.max
+            if leftPriority != rightPriority {
+                return leftPriority < rightPriority
+            }
+            return lhs.code < rhs.code
+        }.first
     }
 
     static func todoEventKey(date: Date, title: String?, description: String?) -> String {
@@ -217,5 +250,82 @@ struct ScanTodoEvent: Codable, Hashable {
 
     var key: String {
         ScanRecord.todoEventKey(date: date, title: title, description: description)
+    }
+}
+
+enum ScanPickupCategory: String, Codable, CaseIterable {
+    case express
+    case tea
+    case coffee
+    case food
+    case retail
+    case other
+
+    var fallbackDisplayName: String {
+        switch self {
+        case .express:
+            return String(localized: "快递")
+        case .tea:
+            return String(localized: "茶饮")
+        case .coffee:
+            return String(localized: "咖啡")
+        case .food:
+            return String(localized: "餐饮")
+        case .retail:
+            return String(localized: "门店")
+        case .other:
+            return String(localized: "其他取件")
+        }
+    }
+}
+
+struct ScanPickupCode: Codable, Hashable {
+    var code: String
+    var category: ScanPickupCategory
+    var merchantName: String?
+    var displayName: String
+    var source: String?
+    var priority: Int?
+
+    init(
+        code: String,
+        category: ScanPickupCategory,
+        merchantName: String?,
+        displayName: String? = nil,
+        source: String? = nil,
+        priority: Int? = nil
+    ) {
+        let normalizedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedMerchantName = merchantName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDisplayName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        self.code = normalizedCode
+        self.category = category
+        self.merchantName = normalizedMerchantName?.isEmpty == true ? nil : normalizedMerchantName
+        self.displayName = (normalizedDisplayName?.isEmpty == false)
+            ? (normalizedDisplayName ?? category.fallbackDisplayName)
+            : category.fallbackDisplayName
+        self.source = source?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.priority = priority
+    }
+
+    var label: String {
+        String(localized: "取件码")
+    }
+
+    var resolvedDisplayName: String {
+        if let merchantName = merchantName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           merchantName.isEmpty == false {
+            return merchantName
+        }
+        let normalizedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedDisplayName.isEmpty == false {
+            return normalizedDisplayName
+        }
+        return category.fallbackDisplayName
+    }
+
+    var summaryText: String {
+        "\(resolvedDisplayName) \(label) \(code)"
     }
 }

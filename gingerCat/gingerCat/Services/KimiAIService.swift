@@ -29,6 +29,7 @@ struct AIOCRInsight: Hashable {
     let description: String?
     let needTodo: Bool
     let events: [AIOCREventInsight]
+    let pickupItems: [AIOCRPickupInsight]
 }
 
 struct AIOCREventInsight: Hashable {
@@ -38,6 +39,15 @@ struct AIOCREventInsight: Hashable {
     let keywords: [String]
     let description: String?
     let needTodo: Bool
+}
+
+struct AIOCRPickupInsight: Hashable {
+    let code: String
+    let category: ScanPickupCategory
+    let merchantName: String?
+    let displayName: String
+    let label: String
+    let priority: Int?
 }
 
 enum AIProviderService {
@@ -285,8 +295,47 @@ enum AIProviderService {
             keywords: cleanedKeywords,
             description: cleanedDescription,
             needTodo: event?.needTodo ?? false,
-            events: normalizedEvents
+            events: normalizedEvents,
+            pickupItems: normalizedPickupItems(from: decoded.pickupItems)
         )
+    }
+
+    private static func normalizedPickupItems(from payloads: [AIOCRPickupPayload]?) -> [AIOCRPickupInsight] {
+        guard let payloads else { return [] }
+
+        var seenCodes: Set<String> = []
+        let items = payloads.compactMap { payload -> AIOCRPickupInsight? in
+            let code = payload.code.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard code.isEmpty == false else { return nil }
+
+            let normalizedCode = code.uppercased()
+            guard seenCodes.insert(normalizedCode).inserted else { return nil }
+
+            let category = PickupCodeExtractor.normalizedCategory(from: payload.category)
+            let merchantName = cleanedOptional(payload.merchantName)
+            let rawDisplayName = cleanedOptional(payload.displayName)
+            let displayName = merchantName
+                ?? rawDisplayName
+                ?? category.fallbackDisplayName
+
+            return AIOCRPickupInsight(
+                code: normalizedCode,
+                category: category,
+                merchantName: merchantName,
+                displayName: displayName,
+                label: String(localized: "取件码"),
+                priority: payload.priority
+            )
+        }
+
+        return items.sorted { lhs, rhs in
+            let leftPriority = lhs.priority ?? Int.max
+            let rightPriority = rhs.priority ?? Int.max
+            if leftPriority != rightPriority {
+                return leftPriority < rightPriority
+            }
+            return lhs.code < rhs.code
+        }
     }
 
     private static func normalizedJSONData(from content: String) -> Data? {
@@ -338,7 +387,7 @@ enum AIProviderService {
 
     private static func userPrompt(rawText: String, currentDateContext: String) -> String {
             """
-            你需要先理解 OCR 文本，再输出摘要和事件信息。只输出标准 JSON，无多余文字。
+            你需要先理解 OCR 文本，再输出摘要、事件信息和取件信息。只输出标准 JSON，无多余文字。
             当前时间基准（必须严格使用，禁止自行假设）：
             - \(currentDateContext)
 
@@ -369,6 +418,12 @@ enum AIProviderService {
             8. 【待办标记规则】event.needTodo 布尔值判断：
                - 有明确未来日期且未过期 → true
                - 无日期 / 日期已过 / 仅为商品介绍 / 非日程内容 → false
+            9. 【取件识别规则】pickupItems 数组：
+               - 识别快递取件码、外卖/餐饮取餐码、茶饮取单号、咖啡取单号、门店提货码等。
+               - 每条 pickupItem 必须包含：code、category。merchantName 尽量补全；没有 merchantName 时 displayName 必须用 category 对应名称兜底。
+               - category 只允许：express / tea / coffee / food / retail / other。
+               - 严禁把物流运单号、手机号误判为取件码；只有明确“取件/取货/取餐/叫号/核销码”等语义才输出。
+               - label 固定输出 “取件码”。
 
             输出结构（严格遵循，禁止增减字段）：
             {
@@ -385,11 +440,22 @@ enum AIProviderService {
                   "description": "事件详情描述",
                   "needTodo": true | false
                 }
+              ],
+              "pickupItems": [
+                {
+                  "code": "取件码或取餐码",
+                  "category": "express|tea|coffee|food|retail|other",
+                  "merchantName": "商家或门店名，没有则 null",
+                  "displayName": "优先商家名，没有时用品类名称兜底",
+                  "label": "取件码",
+                  "priority": 0
+                }
               ]
             }
 
             特殊情况处理：
             - 没有未来事件时，events 返回 []，但 summary / title / keywords / description 仍需正常生成。
+            - 没有取件信息时，pickupItems 返回 []。
             - 文本为商品广告/通知/聊天/说明类，优先生成 summary 和 description，events 若无明确日程则为空数组。
             - 若OCR文本存在识别错误，以可理解的语义为准进行合理修正，禁止输出乱码或无意义内容。
             - 输出前必须自检：将 events 中每一条 date+time 转成完整时间，若不晚于“当前时间基准”，就从 events 删除。
@@ -501,12 +567,200 @@ enum AIProviderService {
     }
 }
 
+enum PickupCodeExtractor {
+    static func extract(from rawText: String, source: String = "regex") -> [ScanPickupCode] {
+        let lines = rawText
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.isEmpty == false }
+
+        guard lines.isEmpty == false else { return [] }
+        let fullText = lines.joined(separator: "\n")
+        let matches = regexMatches(in: fullText)
+        guard matches.isEmpty == false else { return [] }
+
+        var dedupedCodes: Set<String> = []
+        var results: [ScanPickupCode] = []
+
+        for (index, match) in matches.enumerated() {
+            let code = match.code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            guard code.isEmpty == false else { continue }
+            guard dedupedCodes.insert(code).inserted else { continue }
+
+            let merchantName = resolvedMerchantName(lines: lines, context: match.context)
+            let category = normalizedCategory(
+                from: [match.context, merchantName]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
+            )
+            let priority = prioritizedValue(category: category, index: index)
+
+            results.append(
+                ScanPickupCode(
+                    code: code,
+                    category: category,
+                    merchantName: merchantName,
+                    displayName: merchantName ?? category.fallbackDisplayName,
+                    source: source,
+                    priority: priority
+                )
+            )
+        }
+
+        return results.sorted { lhs, rhs in
+            let leftPriority = lhs.priority ?? Int.max
+            let rightPriority = rhs.priority ?? Int.max
+            if leftPriority != rightPriority {
+                return leftPriority < rightPriority
+            }
+            return lhs.code < rhs.code
+        }
+    }
+
+    static func normalizedCategory(from rawValue: String?) -> ScanPickupCategory {
+        let normalized = (rawValue ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        if normalized.contains("express") ||
+            normalized.contains("快递") ||
+            normalized.contains("驿站") ||
+            normalized.contains("丰巢") ||
+            normalized.contains("菜鸟") {
+            return .express
+        }
+        if normalized.contains("tea") ||
+            normalized.contains("奶茶") ||
+            normalized.contains("茶饮") ||
+            normalized.contains("喜茶") ||
+            normalized.contains("奈雪") ||
+            normalized.contains("霸王茶姬") ||
+            normalized.contains("茶百道") ||
+            normalized.contains("蜜雪") {
+            return .tea
+        }
+        if normalized.contains("coffee") ||
+            normalized.contains("咖啡") ||
+            normalized.contains("瑞幸") ||
+            normalized.contains("星巴克") ||
+            normalized.contains("manner") ||
+            normalized.contains("库迪") ||
+            normalized.contains("幸运咖") {
+            return .coffee
+        }
+        if normalized.contains("food") ||
+            normalized.contains("餐饮") ||
+            normalized.contains("取餐") ||
+            normalized.contains("外卖") ||
+            normalized.contains("美团") ||
+            normalized.contains("饿了么") {
+            return .food
+        }
+        if normalized.contains("retail") ||
+            normalized.contains("门店") ||
+            normalized.contains("自提") ||
+            normalized.contains("提货") ||
+            normalized.contains("商场") {
+            return .retail
+        }
+        return .other
+    }
+
+    private static func prioritizedValue(category: ScanPickupCategory, index: Int) -> Int {
+        let categoryPriority: Int
+        switch category {
+        case .express:
+            categoryPriority = 0
+        case .food:
+            categoryPriority = 1
+        case .tea:
+            categoryPriority = 2
+        case .coffee:
+            categoryPriority = 3
+        case .retail:
+            categoryPriority = 4
+        case .other:
+            categoryPriority = 5
+        }
+        return categoryPriority * 100 + index
+    }
+
+    private static func resolvedMerchantName(lines: [String], context: String) -> String? {
+        let contextLower = context.lowercased()
+        let preferredKeywords = [
+            "快递", "驿站", "超市", "门店", "咖啡", "茶", "餐", "瑞幸", "星巴克", "喜茶",
+            "奈雪", "霸王茶姬", "茶百道", "蜜雪", "顺丰", "京东", "中通", "圆通", "申通", "韵达"
+        ]
+
+        if let directLine = lines.first(where: { line in
+            let lowered = line.lowercased()
+            guard lowered.contains(contextLower) else { return false }
+            return preferredKeywords.contains { lowered.contains($0) }
+        }) {
+            let normalized = normalizedMerchantName(from: directLine)
+            if normalized.isEmpty == false { return normalized }
+        }
+
+        if let nearby = lines.first(where: { line in
+            let lowered = line.lowercased()
+            let isCodeLine = lowered.contains("取件码") ||
+                lowered.contains("取货码") ||
+                lowered.contains("取餐码") ||
+                lowered.contains("取单号")
+            guard isCodeLine == false else { return false }
+            return preferredKeywords.contains { lowered.contains($0) }
+        }) {
+            let normalized = normalizedMerchantName(from: nearby)
+            if normalized.isEmpty == false { return normalized }
+        }
+
+        return nil
+    }
+
+    private static func normalizedMerchantName(from text: String) -> String {
+        let cleaned = text
+            .replacingOccurrences(of: #"(取件码|取货码|取餐码|取单号|订单号|叫号|核销码)[:：]?"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"[A-Za-z0-9][A-Za-z0-9\-_]{1,}"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(cleaned.prefix(24))
+    }
+
+    private static func regexMatches(in text: String) -> [(code: String, context: String)] {
+        let pattern = #"(?:取件码|取货码|提货码|取餐码|取单号|订单号|叫号|核销码)\s*[:：#]?\s*([A-Za-z0-9]{2,}(?:[-_][A-Za-z0-9]{1,}){0,4})"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return []
+        }
+        let nsText = text as NSString
+        let fullRange = NSRange(location: 0, length: nsText.length)
+        return regex.matches(in: text, options: [], range: fullRange).compactMap { match in
+            guard match.numberOfRanges >= 2,
+                  let codeRange = Range(match.range(at: 1), in: text) else {
+                return nil
+            }
+            let code = String(text[codeRange])
+            let matchRange = match.range(at: 0)
+            let lineStart = nsText.range(of: "\n", options: .backwards, range: NSRange(location: 0, length: matchRange.location)).location
+            let contextStart = (lineStart == NSNotFound) ? 0 : lineStart + 1
+            let searchEndStart = matchRange.location + matchRange.length
+            let afterRangeLength = max(nsText.length - searchEndStart, 0)
+            let lineEndSearch = NSRange(location: searchEndStart, length: afterRangeLength)
+            let lineEndMatch = nsText.range(of: "\n", options: [], range: lineEndSearch)
+            let contextEnd = (lineEndMatch.location == NSNotFound) ? nsText.length : lineEndMatch.location
+            let context = nsText.substring(with: NSRange(location: contextStart, length: max(contextEnd - contextStart, 0)))
+            return (code: code, context: context)
+        }
+    }
+}
+
 private struct AIOCRInsightResponse: Decodable {
     let summary: String?
     let title: String?
     let keywords: [String]?
     let description: String?
     let events: [AIOCREventPayload]?
+    let pickupItems: [AIOCRPickupPayload]?
 }
 
 private struct AIOCREventPayload: Decodable {
@@ -516,6 +770,14 @@ private struct AIOCREventPayload: Decodable {
     let keywords: [String]?
     let description: String?
     let needTodo: Bool?
+}
+
+private struct AIOCRPickupPayload: Decodable {
+    let code: String
+    let category: String?
+    let merchantName: String?
+    let displayName: String?
+    let priority: Int?
 }
 
 private struct ChatCompletionResponse: Decodable {

@@ -21,6 +21,7 @@ private struct BackgroundOCRPipelineResult {
     let didAISummaryRequestFail: Bool
     let summaryModelName: String?
     let todoEvents: [ScanTodoEvent]
+    let pickupCodes: [ScanPickupCode]
 }
 
 @MainActor
@@ -73,7 +74,7 @@ enum BackgroundImageImportPipeline {
             defaults: defaults
         )
         if result.isOCRCompleted {
-            if result.didAISummaryRequestFail {
+            if result.didAISummaryRequestFail, result.intent != .pickup {
                 await OCRCompletionNotifier.notifyAISummaryFailure(record: record)
             } else {
                 // 捷径后台解析完成后也触发同一套系统提醒，保证无论入口都能收到一致的完成反馈。
@@ -123,6 +124,9 @@ enum BackgroundImageImportPipeline {
         result: BackgroundOCRPipelineResult,
         enabled: Bool
     ) async -> TodoAutoAddService.Result {
+        guard result.intent != .pickup else {
+            return .init(addedCount: 0)
+        }
         guard result.usedAISummary else {
             return .init(addedCount: 0)
         }
@@ -156,7 +160,8 @@ enum BackgroundImageImportPipeline {
                 aiFallbackMessage: nil,
                 didAISummaryRequestFail: false,
                 summaryModelName: nil,
-                todoEvents: []
+                todoEvents: [],
+                pickupCodes: []
             )
         }
         #else
@@ -176,7 +181,8 @@ enum BackgroundImageImportPipeline {
             aiFallbackMessage: nil,
             didAISummaryRequestFail: false,
             summaryModelName: nil,
-            todoEvents: []
+            todoEvents: [],
+            pickupCodes: []
         )
         #endif
 
@@ -238,7 +244,8 @@ enum BackgroundImageImportPipeline {
                 aiFallbackMessage: nil,
                 didAISummaryRequestFail: false,
                 summaryModelName: nil,
-                todoEvents: []
+                todoEvents: [],
+                pickupCodes: []
             )
         } catch VisionOCRServiceError.invalidImage {
             return BackgroundOCRPipelineResult(
@@ -257,7 +264,8 @@ enum BackgroundImageImportPipeline {
                 aiFallbackMessage: nil,
                 didAISummaryRequestFail: false,
                 summaryModelName: nil,
-                todoEvents: []
+                todoEvents: [],
+                pickupCodes: []
             )
         } catch {
             return BackgroundOCRPipelineResult(
@@ -276,7 +284,8 @@ enum BackgroundImageImportPipeline {
                 aiFallbackMessage: nil,
                 didAISummaryRequestFail: false,
                 summaryModelName: nil,
-                todoEvents: []
+                todoEvents: [],
+                pickupCodes: []
             )
         }
     }
@@ -296,11 +305,15 @@ enum BackgroundImageImportPipeline {
         record.eventDescription = result.eventDescription
         record.needTodo = result.needTodo
         record.todoEvents = result.todoEvents
+        record.pickupCodes = result.pickupCodes
         if result.todoEvents.isEmpty == false {
             let validKeys = Set(result.todoEvents.map(\.key))
             let retainedKeys = record.addedTodoEventKeys.intersection(validKeys)
             record.addedTodoEventKeys = retainedKeys
             record.hasAddedTodoReminder = retainedKeys.isEmpty == false
+        } else {
+            record.addedTodoEventKeys = []
+            record.hasAddedTodoReminder = false
         }
         record.isOCRCompleted = result.isOCRCompleted
         record.usedAISummary = result.usedAISummary
@@ -319,6 +332,30 @@ enum BackgroundImageImportPipeline {
         lineBoxes: [OCRLineBox],
         summaryModelName: String
     ) -> BackgroundOCRPipelineResult {
+        let pickupCodes = buildPickupCodes(from: insight, rawText: recognizedText)
+        if let primaryPickupCode = pickupCodes.first {
+            let summary = primaryPickupCode.summaryText
+            return BackgroundOCRPipelineResult(
+                recognizedText: recognizedText,
+                summary: summary,
+                intent: .pickup,
+                eventTitle: summary,
+                eventDate: nil,
+                eventTime: nil,
+                eventKeywords: [primaryPickupCode.category.fallbackDisplayName],
+                eventDescription: pickupDescriptionText(for: pickupCodes),
+                needTodo: false,
+                isOCRCompleted: true,
+                usedAISummary: true,
+                lineBoxes: lineBoxes,
+                aiFallbackMessage: nil,
+                didAISummaryRequestFail: false,
+                summaryModelName: summaryModelName,
+                todoEvents: [],
+                pickupCodes: pickupCodes
+            )
+        }
+
         let resolvedSummary = insight.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? ocrFallbackText
             : insight.summary.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -358,7 +395,8 @@ enum BackgroundImageImportPipeline {
             aiFallbackMessage: nil,
             didAISummaryRequestFail: false,
             summaryModelName: summaryModelName,
-            todoEvents: todoEvents
+            todoEvents: todoEvents,
+            pickupCodes: []
         )
     }
 
@@ -370,6 +408,30 @@ enum BackgroundImageImportPipeline {
         summaryModelName: String? = nil
     ) -> BackgroundOCRPipelineResult {
         let resolvedText = payload.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pickupCodes = PickupCodeExtractor.extract(from: resolvedText)
+        if let primaryPickupCode = pickupCodes.first {
+            let summary = primaryPickupCode.summaryText
+            return BackgroundOCRPipelineResult(
+                recognizedText: resolvedText,
+                summary: summary,
+                intent: .pickup,
+                eventTitle: summary,
+                eventDate: nil,
+                eventTime: nil,
+                eventKeywords: [primaryPickupCode.category.fallbackDisplayName],
+                eventDescription: pickupDescriptionText(for: pickupCodes),
+                needTodo: false,
+                isOCRCompleted: true,
+                usedAISummary: false,
+                lineBoxes: lineBoxes,
+                aiFallbackMessage: aiFallbackMessage,
+                didAISummaryRequestFail: didAISummaryRequestFail,
+                summaryModelName: summaryModelName,
+                todoEvents: [],
+                pickupCodes: pickupCodes
+            )
+        }
+
         let eventDescription = resolvedText.isEmpty ? nil : resolvedText
 
         return BackgroundOCRPipelineResult(
@@ -388,7 +450,8 @@ enum BackgroundImageImportPipeline {
             aiFallbackMessage: aiFallbackMessage,
             didAISummaryRequestFail: didAISummaryRequestFail,
             summaryModelName: summaryModelName,
-            todoEvents: []
+            todoEvents: [],
+            pickupCodes: []
         )
     }
 
@@ -418,6 +481,35 @@ enum BackgroundImageImportPipeline {
         .sorted { lhs, rhs in
             lhs.date < rhs.date
         }
+    }
+
+    private static func buildPickupCodes(from insight: AIOCRInsight, rawText: String) -> [ScanPickupCode] {
+        var normalized: [ScanPickupCode] = insight.pickupItems.compactMap { item in
+            ScanPickupCode(
+                code: item.code,
+                category: item.category,
+                merchantName: item.merchantName,
+                displayName: item.displayName,
+                source: "ai",
+                priority: item.priority
+            )
+        }.filter { $0.code.isEmpty == false }
+
+        if normalized.isEmpty {
+            normalized = PickupCodeExtractor.extract(from: rawText)
+        }
+        return normalized.sorted { lhs, rhs in
+            let leftPriority = lhs.priority ?? Int.max
+            let rightPriority = rhs.priority ?? Int.max
+            if leftPriority != rightPriority {
+                return leftPriority < rightPriority
+            }
+            return lhs.code < rhs.code
+        }
+    }
+
+    private static func pickupDescriptionText(for pickupCodes: [ScanPickupCode]) -> String {
+        pickupCodes.map(\.summaryText).joined(separator: "；")
     }
 
     private static func parsedEventDate(date: String?, time: String) -> Date? {

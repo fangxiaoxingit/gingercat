@@ -1,9 +1,10 @@
 import AppIntents
 import UniformTypeIdentifiers
 
-struct ImportImageAppIntent: AppIntent {
+@available(iOS 17.0, *)
+struct ImportImageAppIntent: LiveActivityIntent {
     static let title: LocalizedStringResource = "导入图片并解析"
-    static let description = IntentDescription("把图片直接发送到大橘小事并在后台完成识别，不需要手动打开 App。")
+    static let description = IntentDescription("把图片发送到大橘小事并完成识别，识别到取件码时优先触发实时活动展示。")
     static let openAppWhenRun = false
 
     @Parameter(
@@ -13,7 +14,7 @@ struct ImportImageAppIntent: AppIntent {
     )
     var image: IntentFile
 
-    // 捷径入口在后台直接执行 OCR/AI 与落库，避免还要再打开 App 才真正开始解析。
+    // 该意图声明为 LiveActivityIntent，允许系统在后台意图链路里触发实时活动请求。
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let record = try await BackgroundImageImportPipeline.importImage(
             imageData: image.data,
@@ -30,14 +31,16 @@ struct ImportImageAppIntent: AppIntent {
 
 struct GingerCatShortcutsProvider: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
-        AppShortcut(
-            intent: ImportImageAppIntent(),
-            phrases: [
-                "用 \(.applicationName) 解析图片",
-                "把图片导入 \(.applicationName)"
-            ],
-            shortTitle: "导入并解析",
-            systemImageName: "photo.badge.plus"
-        )
+        return [
+            AppShortcut(
+                intent: ImportImageAppIntent(),
+                phrases: [
+                    "用 \(.applicationName) 解析图片",
+                    "把图片导入 \(.applicationName)"
+                ],
+                shortTitle: "导入并解析",
+                systemImageName: "photo.badge.plus"
+            )
+        ]
     }
 }

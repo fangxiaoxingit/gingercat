@@ -7,6 +7,9 @@ struct OCRLiveActivityAttributes: ActivityAttributes {
         let title: String
         let summary: String
         let dateText: String
+        let isPickupPriority: Bool
+        let pickupText: String?
+        let pickupExtraCount: Int
     }
 
     let recordID: String

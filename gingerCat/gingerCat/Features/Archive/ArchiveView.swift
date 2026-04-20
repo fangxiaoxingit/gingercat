@@ -153,6 +153,11 @@ struct ArchiveView: View {
         (record.eventDescription ?? "").localizedCaseInsensitiveContains(keyword) ||
         (record.eventTitle ?? "").localizedCaseInsensitiveContains(keyword) ||
         record.eventKeywordsText.localizedCaseInsensitiveContains(keyword) ||
+        record.pickupCodes.contains(where: { pickup in
+            pickup.code.localizedCaseInsensitiveContains(keyword) ||
+            pickup.resolvedDisplayName.localizedCaseInsensitiveContains(keyword) ||
+            pickup.category.fallbackDisplayName.localizedCaseInsensitiveContains(keyword)
+        }) ||
         record.note.localizedCaseInsensitiveContains(keyword)
     }
 
@@ -283,6 +288,10 @@ private struct ArchiveRowContent: View {
     }
 
     private var summaryText: String {
+        if let primaryPickupCode = record.primaryPickupCode {
+            return primaryPickupCode.summaryText
+        }
+
         let title = (record.eventTitle ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if title.isEmpty == false {
             return title
@@ -307,7 +316,14 @@ private struct ArchiveRowContent: View {
 
     private var metaInfoLine: some View {
         HStack(spacing: 8) {
-            if isTodoRecord {
+            if isPickupRecord {
+                Text(AppDateTimeFormatter.string(from: displayedDate))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(String(localized: "取件 \(record.pickupCodes.count) 条"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.primary)
+            } else if isTodoRecord {
                 Text(String(localized: "待办时间：\(AppDateTimeFormatter.string(from: displayedDate))"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -330,6 +346,10 @@ private struct ArchiveRowContent: View {
             return true
         }
         return record.needTodo
+    }
+
+    private var isPickupRecord: Bool {
+        record.resolvedIntent == .pickup || record.pickupCodes.isEmpty == false
     }
 
     private var hasAddedTodoReminder: Bool {

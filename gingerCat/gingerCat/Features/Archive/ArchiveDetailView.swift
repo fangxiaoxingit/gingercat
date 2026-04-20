@@ -302,7 +302,7 @@ struct ArchiveDetailView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .center, spacing: 12) {
-                    Label(moduleTitle(at: index), systemImage: "text.quote")
+                    Label(moduleTitle(for: module, at: index), systemImage: "text.quote")
                         .font(.headline)
 
                     Spacer(minLength: 0)
@@ -341,10 +341,12 @@ struct ArchiveDetailView: View {
                     content: module.keywordsText
                 )
 
-                detailField(
-                    title: String(localized: "待办提醒时间"),
-                    content: module.dueDateText
-                )
+                if module.kind != .pickup {
+                    detailField(
+                        title: String(localized: "待办提醒时间"),
+                        content: module.dueDateText
+                    )
+                }
 
                 Divider()
 
@@ -578,19 +580,24 @@ struct ArchiveDetailView: View {
             recognizedText: recognition.text,
             imageData: record.imageData
         )
+        let pickupCodes = PickupCodeExtractor.extract(from: payload.rawText)
+        let primaryPickupCode = pickupCodes.first
 
         // 手动本地提取只更新 OCR 原文，避免重新生成本地摘要或本地事件结构。
         record.recognizedText = recognition.text
         record.ocrLineBoxes = recognition.lineBoxes
-        record.summary = payload.summary
-        record.intent = ScanIntent.summary.rawValue
-        record.eventTitle = nil
+        record.summary = primaryPickupCode?.summaryText ?? payload.summary
+        record.intent = primaryPickupCode == nil ? ScanIntent.summary.rawValue : ScanIntent.pickup.rawValue
+        record.eventTitle = primaryPickupCode?.summaryText
         record.eventDate = nil
         record.eventTime = nil
-        record.eventKeywordsText = ""
-        record.eventDescription = payload.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : payload.rawText
+        record.eventKeywordsText = primaryPickupCode.map { $0.category.fallbackDisplayName } ?? ""
+        record.eventDescription = pickupCodes.isEmpty
+            ? (payload.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : payload.rawText)
+            : pickupDescriptionText(for: pickupCodes)
         record.needTodo = false
         record.todoEvents = []
+        record.pickupCodes = pickupCodes
         record.addedTodoEventKeys = []
         record.hasAddedTodoReminder = false
         record.isOCRCompleted = true
@@ -606,6 +613,30 @@ struct ArchiveDetailView: View {
         insight: AIOCRInsight,
         lineBoxes: [OCRLineBox]
     ) {
+        let pickupCodes = buildPickupCodes(from: insight, rawText: recognizedText)
+        if let primaryPickupCode = pickupCodes.first {
+            record.recognizedText = recognizedText
+            record.ocrLineBoxes = lineBoxes
+            record.summary = primaryPickupCode.summaryText
+            record.intent = ScanIntent.pickup.rawValue
+            record.eventTitle = primaryPickupCode.summaryText
+            record.eventDate = nil
+            record.eventTime = nil
+            record.eventKeywordsText = primaryPickupCode.category.fallbackDisplayName
+            record.eventDescription = pickupDescriptionText(for: pickupCodes)
+            record.needTodo = false
+            record.todoEvents = []
+            record.pickupCodes = pickupCodes
+            record.addedTodoEventKeys = []
+            record.hasAddedTodoReminder = false
+            record.isOCRCompleted = true
+            record.usedAISummary = true
+            record.summaryUpdatedAt = .now
+            record.summaryModelName = AIProviderConfigStore.selectedRuntimeConfig().summaryModelDisplayName
+            try? modelContext.save()
+            return
+        }
+
         // AI 未返回摘要时回落到 OCR 原文，确保这里不会重新启用本地摘要。
         let resolvedSummary = insight.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? ocrFallbackText
@@ -640,6 +671,7 @@ struct ArchiveDetailView: View {
         record.eventDescription = descriptionText
         record.needTodo = needTodo
         record.todoEvents = todoEvents
+        record.pickupCodes = []
         if todoEvents.isEmpty {
             record.addedTodoEventKeys = []
             record.hasAddedTodoReminder = false
@@ -682,6 +714,35 @@ struct ArchiveDetailView: View {
         .sorted { lhs, rhs in
             lhs.date < rhs.date
         }
+    }
+
+    private func buildPickupCodes(from insight: AIOCRInsight, rawText: String) -> [ScanPickupCode] {
+        var normalized: [ScanPickupCode] = insight.pickupItems.compactMap { item in
+            ScanPickupCode(
+                code: item.code,
+                category: item.category,
+                merchantName: item.merchantName,
+                displayName: item.displayName,
+                source: "ai",
+                priority: item.priority
+            )
+        }.filter { $0.code.isEmpty == false }
+
+        if normalized.isEmpty {
+            normalized = PickupCodeExtractor.extract(from: rawText)
+        }
+        return normalized.sorted { lhs, rhs in
+            let leftPriority = lhs.priority ?? Int.max
+            let rightPriority = rhs.priority ?? Int.max
+            if leftPriority != rightPriority {
+                return leftPriority < rightPriority
+            }
+            return lhs.code < rhs.code
+        }
+    }
+
+    private func pickupDescriptionText(for pickupCodes: [ScanPickupCode]) -> String {
+        pickupCodes.map(\.summaryText).joined(separator: "；")
     }
 
     private func ensureRecognitionForAI() async throws -> OCRRecognitionResult {
@@ -746,6 +807,25 @@ struct ArchiveDetailView: View {
         let normalizedSummary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
         let summaryFallback = normalizedSummary.isEmpty ? String(localized: "无") : normalizedSummary
         let summaryTitleFallback = normalizedSummary.isEmpty ? String(localized: "无") : String(normalizedSummary.prefix(40))
+        if record.pickupCodes.isEmpty == false {
+            let primary = record.primaryPickupCode
+            let detailText = record.pickupCodes.map { pickup in
+                "\(pickup.summaryText)（\(pickup.category.fallbackDisplayName)）"
+            }.joined(separator: "\n")
+            return [
+                RecordInfoModule(
+                    id: "pickup-\(record.id.uuidString)",
+                    reminderKey: nil,
+                    title: primary?.summaryText ?? summaryTitleFallback,
+                    detail: detailText.isEmpty ? summaryFallback : detailText,
+                    keywords: Array(Set(record.pickupCodes.map { $0.category.fallbackDisplayName })).sorted(),
+                    dueDate: nil,
+                    isTodoCandidate: false,
+                    kind: .pickup
+                )
+            ]
+        }
+
         let todoEvents = record.todoEvents.filter(\.needTodo).sorted { lhs, rhs in
             lhs.date < rhs.date
         }
@@ -763,7 +843,8 @@ struct ArchiveDetailView: View {
                     detail: detail.isEmpty ? summaryFallback : detail,
                     keywords: event.keywords,
                     dueDate: event.date,
-                    isTodoCandidate: true
+                    isTodoCandidate: true,
+                    kind: .event
                 )
             }
         }
@@ -785,7 +866,8 @@ struct ArchiveDetailView: View {
                 detail: resolvedDetailText,
                 keywords: record.eventKeywords,
                 dueDate: record.eventDate,
-                isTodoCandidate: record.needTodo
+                isTodoCandidate: record.needTodo,
+                kind: .record
             )
         ]
     }
@@ -817,7 +899,10 @@ struct ArchiveDetailView: View {
             ?? recordInfoModules.first
     }
 
-    private func moduleTitle(at index: Int) -> String {
+    private func moduleTitle(for module: RecordInfoModule, at index: Int) -> String {
+        if module.kind == .pickup {
+            return String(localized: "取件信息")
+        }
         if recordInfoModules.count > 1 {
             return String(localized: "记录信息 \(index + 1)")
         }
@@ -1584,6 +1669,7 @@ private struct RecordInfoModule: Identifiable, Hashable {
     let keywords: [String]
     let dueDate: Date?
     let isTodoCandidate: Bool
+    let kind: RecordInfoModuleKind
 
     var keywordsText: String {
         keywords.isEmpty
@@ -1597,6 +1683,12 @@ private struct RecordInfoModule: Identifiable, Hashable {
         }
         return AppDateTimeFormatter.string(from: dueDate)
     }
+}
+
+private enum RecordInfoModuleKind: String, Hashable {
+    case pickup
+    case event
+    case record
 }
 
 private struct ReminderDraft {

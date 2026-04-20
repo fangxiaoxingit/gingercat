@@ -1,4 +1,5 @@
 import Foundation
+import os
 import UserNotifications
 #if canImport(UIKit)
 import UIKit
@@ -10,20 +11,28 @@ import ActivityKit
 @MainActor
 enum OCRCompletionNotifier {
     static func notify(record: ScanRecord, autoAddedTodoCount: Int = 0) async {
+        let isPickupPriority = isPickupRecord(record)
         #if canImport(UIKit)
-        // 只在用户不在前台时发送系统级提醒，避免和当前页面的即时反馈重复。
-        guard UIApplication.shared.applicationState != .active else { return }
+        // 常规识别维持“仅后台提醒”；取件优先事项前台也允许系统级提醒。
+        if UIApplication.shared.applicationState == .active, isPickupPriority == false {
+            return
+        }
         #endif
 
         let title = completionTitle(for: record)
         let summary = completionSummary(for: record)
         let dateText = completionDateText(for: record)
+        let pickupText = pickupLiveActivityText(for: record)
+        let pickupExtraCount = max(record.pickupCodes.count - 1, 0)
 
         if await OCRDynamicIslandService.showIfAvailable(
             recordID: record.id,
             title: title,
             summary: summary,
-            dateText: dateText
+            dateText: dateText,
+            isPickupPriority: isPickupPriority,
+            pickupText: pickupText,
+            pickupExtraCount: pickupExtraCount
         ) {
             return
         }
@@ -33,7 +42,8 @@ enum OCRCompletionNotifier {
             title: title,
             summary: summary,
             dateText: dateText,
-            autoAddedTodoCount: autoAddedTodoCount
+            autoAddedTodoCount: autoAddedTodoCount,
+            isPickupPriority: isPickupPriority
         )
     }
 
@@ -50,6 +60,9 @@ enum OCRCompletionNotifier {
     }
 
     static func completionTitle(for record: ScanRecord) -> String {
+        if let pickup = record.primaryPickupCode {
+            return pickup.resolvedDisplayName
+        }
         if let title = record.eventTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
            title.isEmpty == false {
             return title
@@ -62,6 +75,13 @@ enum OCRCompletionNotifier {
     }
 
     private static func completionSummary(for record: ScanRecord) -> String {
+        if let pickup = record.primaryPickupCode {
+            let extraCount = max(record.pickupCodes.count - 1, 0)
+            if extraCount > 0 {
+                return "\(pickup.summaryText)（另有\(extraCount)个）"
+            }
+            return pickup.summaryText
+        }
         let normalized = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
         if normalized.isEmpty {
             return String(localized: "识别结果已生成")
@@ -75,6 +95,15 @@ enum OCRCompletionNotifier {
         }
         return AppDateTimeFormatter.string(from: record.createdAt)
     }
+
+    private static func isPickupRecord(_ record: ScanRecord) -> Bool {
+        record.resolvedIntent == .pickup || record.pickupCodes.isEmpty == false
+    }
+
+    private static func pickupLiveActivityText(for record: ScanRecord) -> String? {
+        guard let pickup = record.primaryPickupCode else { return nil }
+        return pickup.summaryText
+    }
 }
 
 private enum OCRLocalNotificationService {
@@ -83,12 +112,17 @@ private enum OCRLocalNotificationService {
         title: String,
         summary: String,
         dateText: String,
-        autoAddedTodoCount: Int
+        autoAddedTodoCount: Int,
+        isPickupPriority: Bool
     ) async {
         let content = UNMutableNotificationContent()
-        content.title = autoAddedTodoCount > 0
-            ? String(localized: "识别完成（已加入待办）")
-            : String(localized: "识别完成")
+        if isPickupPriority {
+            content.title = String(localized: "识别到取件信息")
+        } else {
+            content.title = autoAddedTodoCount > 0
+                ? String(localized: "识别完成（已加入待办）")
+                : String(localized: "识别完成")
+        }
         content.body = "\(title)\n\(summary)\n\(dateText)"
         content.sound = .default
         content.userInfo = userInfo(for: recordID)
@@ -430,25 +464,43 @@ private struct TodoDueCandidate {
 }
 
 private enum OCRDynamicIslandService {
+    private static let logSubsystem = "com.siyufang.LivePhotoMakerUniversal.gingerCat"
+    private static let logger = Logger(
+        subsystem: logSubsystem,
+        category: "OCRDynamicIsland"
+    )
+
     static func showIfAvailable(
         recordID: UUID,
         title: String,
         summary: String,
-        dateText: String
+        dateText: String,
+        isPickupPriority: Bool,
+        pickupText: String?,
+        pickupExtraCount: Int
     ) async -> Bool {
         #if canImport(ActivityKit)
         if #available(iOS 16.1, *) {
+            logger.info("Attempt live activity. pickup=\(isPickupPriority, privacy: .public), record=\(recordID.uuidString, privacy: .public)")
             // 先保证系统允许 Live Activities，再按设备能力决定是否尝试灵动岛展示。
             guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+                logger.warning("Live Activities disabled by system/user settings.")
                 return false
             }
-            guard DynamicIslandCapability.isSupported else { return false }
+            let capability = DynamicIslandCapability.supportVerdict
+            guard capability != .unsupported else {
+                logger.info("Capability judged as unsupported.")
+                return false
+            }
 
             let attributes = OCRLiveActivityAttributes(recordID: recordID.uuidString)
             let state = OCRLiveActivityAttributes.ContentState(
                 title: title,
                 summary: summary,
-                dateText: dateText
+                dateText: dateText,
+                isPickupPriority: isPickupPriority,
+                pickupText: pickupText,
+                pickupExtraCount: pickupExtraCount
             )
             let content = ActivityContent(
                 state: state,
@@ -467,11 +519,14 @@ private enum OCRDynamicIslandService {
                 )
 
                 Task {
-                    try? await Task.sleep(nanoseconds: 15_000_000_000)
+                    let displayDuration: UInt64 = isPickupPriority ? 60_000_000_000 : 15_000_000_000
+                    try? await Task.sleep(nanoseconds: displayDuration)
                     await activity.end(content, dismissalPolicy: .default)
                 }
+                DynamicIslandCapability.cacheSupportIfNeeded(true)
                 return true
             } catch {
+                logger.error("Activity.request failed: \(String(describing: error), privacy: .public)")
                 return false
             }
         }
@@ -481,22 +536,47 @@ private enum OCRDynamicIslandService {
 }
 
 private enum DynamicIslandCapability {
-    static var isSupported: Bool {
+    enum SupportVerdict: Equatable {
+        case supported
+        case unsupported
+        case unknown
+    }
+
+    static var supportVerdict: SupportVerdict {
         #if canImport(UIKit)
-        guard UIDevice.current.userInterfaceIdiom == .phone else { return false }
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return .unsupported }
 
         // 运行时优先用安全区高度判断灵动岛能力，避免新机型因硬编码列表缺失被误判成不支持。
         if let topInset = topSafeAreaInset {
-            return topInset >= 51
+            if topInset >= 51 {
+                cacheSupportIfNeeded(true)
+                return .supported
+            }
+            // 某些运行时窗口状态下安全区可能不稳定，这里标记为 unknown，交给 Activity.request 最终确认。
+            return .unknown
         }
 
-        // 没有可用窗口时回退到机型表，仍保持老机型稳定回落通知。
+        if cachedSupport == true {
+            return .supported
+        }
+
+        // 没有可用窗口时回退到机型表；未知新机型返回 unknown，交给请求链路最终确认。
         if let hardwareIdentifier = HardwareIdentifier.current,
            dynamicIslandIdentifiers.contains(hardwareIdentifier) {
-            return true
+            cacheSupportIfNeeded(true)
+            return .supported
+        }
+
+        if let hardwareIdentifier = HardwareIdentifier.current,
+           isKnownNonDynamicIslandModel(hardwareIdentifier) {
+            return .unsupported
         }
         #endif
-        return false
+        return .unknown
+    }
+
+    static func cacheSupportIfNeeded(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: cacheKey)
     }
 
     // 覆盖已发布的灵动岛机型；未知机型默认回落系统通知，避免误判导致提醒丢失。
@@ -507,15 +587,36 @@ private enum DynamicIslandCapability {
         "iPhone17,1", "iPhone17,2", "iPhone17,3", "iPhone17,4"
     ]
 
+    private static let cacheKey = "dynamicIsland.capability.cached"
+
+    private static var cachedSupport: Bool? {
+        guard UserDefaults.standard.object(forKey: cacheKey) != nil else {
+            return nil
+        }
+        return UserDefaults.standard.bool(forKey: cacheKey)
+    }
+
+    private static func isKnownNonDynamicIslandModel(_ identifier: String) -> Bool {
+        guard identifier.hasPrefix("iPhone"),
+              let majorPart = identifier.split(separator: ",").first,
+              let major = Int(majorPart.replacingOccurrences(of: "iPhone", with: "")) else {
+            return false
+        }
+        // iPhone14 及更老机型明确无灵动岛。
+        return major < 15
+    }
+
     #if canImport(UIKit)
     private static var topSafeAreaInset: CGFloat? {
         let scenes = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
-        let candidateWindows = scenes.flatMap(\.windows)
-        if let keyWindow = candidateWindows.first(where: \.isKeyWindow) {
-            return keyWindow.safeAreaInsets.top
+            .filter { $0.activationState == .foregroundActive || $0.activationState == .foregroundInactive }
+        for scene in scenes {
+            if let keyWindow = scene.windows.first(where: \.isKeyWindow) {
+                return keyWindow.safeAreaInsets.top
+            }
         }
-        return candidateWindows.first?.safeAreaInsets.top
+        return nil
     }
     #endif
 }
