@@ -42,6 +42,7 @@ struct gingerCatApp: App {
         .onChange(of: scenePhase) { _, newPhase in
             // 分享扩展与捷径都会把图片先写进共享容器，App 回到前台时统一在这里消费即可。
             guard newPhase == .active else { return }
+            PickupSchemaMigrationService.runIfNeeded(modelContainer: sharedModelContainer)
             externalImportCenter.refreshPendingImport()
         }
     }

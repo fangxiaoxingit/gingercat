@@ -20,22 +20,28 @@ struct gingerCatTests {
         let pickupCodes = PickupCodeExtractor.extract(from: text)
         let first = try #require(pickupCodes.first)
 
-        #expect(first.code == "20-2-2565")
+        #expect(first.codeValue == "20-2-2565")
         #expect(first.category == .express)
-        #expect(first.label == "取件码")
+        #expect(first.codeLabel == "取件码")
         #expect(first.resolvedDisplayName.isEmpty == false)
+        #expect(first.resolvedItemName.isEmpty == false)
     }
 
     @Test
-    func pickupDisplayNameFallsBackToCategory() async throws {
+    func pickupBrandNameFallsBackToOther() async throws {
         let pickup = ScanPickupCode(
-            code: "A1023",
+            brandName: nil,
+            codeValue: "A1023",
+            codeLabel: "取件码",
             category: .coffee,
-            merchantName: nil
+            pickupDate: "2026-04-21",
+            pickupTime: "13:11"
         )
 
-        #expect(pickup.resolvedDisplayName == "咖啡")
-        #expect(pickup.summaryText == "咖啡 取件码 A1023")
+        #expect(pickup.resolvedBrandName == "其他")
+        #expect(pickup.resolvedItemName == "咖啡")
+        #expect(pickup.summaryText == "其他 取件码 A1023")
+        #expect(pickup.dateTimeText == "2026-04-21 13:11")
     }
 
 }

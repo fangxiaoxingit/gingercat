@@ -154,9 +154,10 @@ struct ArchiveView: View {
         (record.eventTitle ?? "").localizedCaseInsensitiveContains(keyword) ||
         record.eventKeywordsText.localizedCaseInsensitiveContains(keyword) ||
         record.pickupCodes.contains(where: { pickup in
-            pickup.code.localizedCaseInsensitiveContains(keyword) ||
-            pickup.resolvedDisplayName.localizedCaseInsensitiveContains(keyword) ||
-            pickup.category.fallbackDisplayName.localizedCaseInsensitiveContains(keyword)
+            pickup.codeValue.localizedCaseInsensitiveContains(keyword) ||
+            pickup.resolvedBrandName.localizedCaseInsensitiveContains(keyword) ||
+            pickup.resolvedItemName.localizedCaseInsensitiveContains(keyword) ||
+            pickup.category.displayName.localizedCaseInsensitiveContains(keyword)
         }) ||
         record.note.localizedCaseInsensitiveContains(keyword)
     }
@@ -349,7 +350,7 @@ private struct ArchiveRowContent: View {
     }
 
     private var isPickupRecord: Bool {
-        record.resolvedIntent == .pickup || record.pickupCodes.isEmpty == false
+        record.pickupCodes.isEmpty == false
     }
 
     private var hasAddedTodoReminder: Bool {

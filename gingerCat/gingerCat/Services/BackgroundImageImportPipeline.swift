@@ -342,7 +342,7 @@ enum BackgroundImageImportPipeline {
                 eventTitle: summary,
                 eventDate: nil,
                 eventTime: nil,
-                eventKeywords: [primaryPickupCode.category.fallbackDisplayName],
+                eventKeywords: [primaryPickupCode.category.displayName],
                 eventDescription: pickupDescriptionText(for: pickupCodes),
                 needTodo: false,
                 isOCRCompleted: true,
@@ -418,7 +418,7 @@ enum BackgroundImageImportPipeline {
                 eventTitle: summary,
                 eventDate: nil,
                 eventTime: nil,
-                eventKeywords: [primaryPickupCode.category.fallbackDisplayName],
+                eventKeywords: [primaryPickupCode.category.displayName],
                 eventDescription: pickupDescriptionText(for: pickupCodes),
                 needTodo: false,
                 isOCRCompleted: true,
@@ -486,14 +486,17 @@ enum BackgroundImageImportPipeline {
     private static func buildPickupCodes(from insight: AIOCRInsight, rawText: String) -> [ScanPickupCode] {
         var normalized: [ScanPickupCode] = insight.pickupItems.compactMap { item in
             ScanPickupCode(
-                code: item.code,
+                brandName: item.brandName,
+                itemName: item.itemName,
+                codeValue: item.codeValue,
+                codeLabel: item.codeLabel,
                 category: item.category,
-                merchantName: item.merchantName,
-                displayName: item.displayName,
+                pickupDate: item.pickupDate,
+                pickupTime: item.pickupTime,
                 source: "ai",
                 priority: item.priority
             )
-        }.filter { $0.code.isEmpty == false }
+        }.filter { $0.codeValue.isEmpty == false }
 
         if normalized.isEmpty {
             normalized = PickupCodeExtractor.extract(from: rawText)
@@ -504,12 +507,15 @@ enum BackgroundImageImportPipeline {
             if leftPriority != rightPriority {
                 return leftPriority < rightPriority
             }
-            return lhs.code < rhs.code
+            return lhs.codeValue < rhs.codeValue
         }
     }
 
     private static func pickupDescriptionText(for pickupCodes: [ScanPickupCode]) -> String {
-        pickupCodes.map(\.summaryText).joined(separator: "；")
+        pickupCodes.map { pickup in
+            let dateTime = pickup.dateTimeText ?? String(localized: "未知时间")
+            return "\(pickup.summaryText)（\(pickup.category.displayName)，\(dateTime)）"
+        }.joined(separator: "；")
     }
 
     private static func parsedEventDate(date: String?, time: String) -> Date? {

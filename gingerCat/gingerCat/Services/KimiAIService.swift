@@ -42,11 +42,13 @@ struct AIOCREventInsight: Hashable {
 }
 
 struct AIOCRPickupInsight: Hashable {
-    let code: String
+    let brandName: String
+    let itemName: String
+    let codeValue: String
+    let codeLabel: String
     let category: ScanPickupCategory
-    let merchantName: String?
-    let displayName: String
-    let label: String
+    let pickupDate: String?
+    let pickupTime: String?
     let priority: Int?
 }
 
@@ -305,25 +307,25 @@ enum AIProviderService {
 
         var seenCodes: Set<String> = []
         let items = payloads.compactMap { payload -> AIOCRPickupInsight? in
-            let code = payload.code.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard code.isEmpty == false else { return nil }
-
-            let normalizedCode = code.uppercased()
-            guard seenCodes.insert(normalizedCode).inserted else { return nil }
+            let codeValue = payload.codeValue.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            guard codeValue.isEmpty == false else { return nil }
+            guard seenCodes.insert(codeValue).inserted else { return nil }
 
             let category = PickupCodeExtractor.normalizedCategory(from: payload.category)
-            let merchantName = cleanedOptional(payload.merchantName)
-            let rawDisplayName = cleanedOptional(payload.displayName)
-            let displayName = merchantName
-                ?? rawDisplayName
-                ?? category.fallbackDisplayName
+            let brandName = cleanedOptional(payload.brandName) ?? String(localized: "其他")
+            let itemName = cleanedOptional(payload.itemName) ?? brandName
+            let codeLabel = PickupCodeExtractor.normalizedCodeLabel(from: payload.codeLabel)
+            let pickupDate = PickupCodeExtractor.normalizedPickupDate(from: payload.pickupDate)
+            let pickupTime = PickupCodeExtractor.normalizedPickupTime(from: payload.pickupTime)
 
             return AIOCRPickupInsight(
-                code: normalizedCode,
+                brandName: brandName,
+                itemName: itemName,
+                codeValue: codeValue,
+                codeLabel: codeLabel,
                 category: category,
-                merchantName: merchantName,
-                displayName: displayName,
-                label: String(localized: "取件码"),
+                pickupDate: pickupDate,
+                pickupTime: pickupTime,
                 priority: payload.priority
             )
         }
@@ -334,7 +336,7 @@ enum AIProviderService {
             if leftPriority != rightPriority {
                 return leftPriority < rightPriority
             }
-            return lhs.code < rhs.code
+            return lhs.codeValue < rhs.codeValue
         }
     }
 
@@ -420,10 +422,12 @@ enum AIProviderService {
                - 无日期 / 日期已过 / 仅为商品介绍 / 非日程内容 → false
             9. 【取件识别规则】pickupItems 数组：
                - 识别快递取件码、外卖/餐饮取餐码、茶饮取单号、咖啡取单号、门店提货码等。
-               - 每条 pickupItem 必须包含：code、category。merchantName 尽量补全；没有 merchantName 时 displayName 必须用 category 对应名称兜底。
-               - category 只允许：express / tea / coffee / food / retail / other。
+               - 每条 pickupItem 必须包含：brandName、itemName、codeValue、codeLabel、category。pickupDate/pickupTime 没有可填 null。
+               - category 只允许中文：咖啡 / 饮品 / 快递 / 其他。
+               - brandName 没有时填“其他”。
+               - itemName 为商品/包裹名称（如“生椰拿铁”“顺丰快递”），缺失时可回填 brandName，禁止留空。
+               - codeLabel 只允许：取件码 / 取餐码。
                - 严禁把物流运单号、手机号误判为取件码；只有明确“取件/取货/取餐/叫号/核销码”等语义才输出。
-               - label 固定输出 “取件码”。
 
             输出结构（严格遵循，禁止增减字段）：
             {
@@ -443,11 +447,13 @@ enum AIProviderService {
               ],
               "pickupItems": [
                 {
-                  "code": "取件码或取餐码",
-                  "category": "express|tea|coffee|food|retail|other",
-                  "merchantName": "商家或门店名，没有则 null",
-                  "displayName": "优先商家名，没有时用品类名称兜底",
-                  "label": "取件码",
+                  "brandName": "品牌或门店名，没有时填“其他”",
+                  "itemName": "商品/包裹名称，缺失时回填 brandName",
+                  "codeValue": "取件码或取餐码值",
+                  "codeLabel": "取件码|取餐码",
+                  "category": "咖啡|饮品|快递|其他",
+                  "pickupDate": "YYYY-MM-DD | null",
+                  "pickupTime": "HH:MM | null",
                   "priority": 0
                 }
               ]
@@ -585,24 +591,36 @@ enum PickupCodeExtractor {
         var results: [ScanPickupCode] = []
 
         for (index, match) in matches.enumerated() {
-            let code = match.code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-            guard code.isEmpty == false else { continue }
-            guard dedupedCodes.insert(code).inserted else { continue }
+            let codeValue = match.code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            guard codeValue.isEmpty == false else { continue }
+            guard dedupedCodes.insert(codeValue).inserted else { continue }
 
-            let merchantName = resolvedMerchantName(lines: lines, context: match.context)
+            let brandName = resolvedMerchantName(lines: lines, context: match.context) ?? String(localized: "其他")
             let category = normalizedCategory(
-                from: [match.context, merchantName]
+                from: [match.context, brandName]
                     .compactMap { $0 }
                     .joined(separator: " ")
             )
+            let itemName = resolvedItemName(
+                lines: lines,
+                context: match.context,
+                brandName: brandName,
+                category: category
+            )
+            let codeLabel = normalizedCodeLabel(from: match.context)
+            let pickupDate = normalizedPickupDate(from: extractDate(from: match.context) ?? extractDate(from: fullText))
+            let pickupTime = normalizedPickupTime(from: extractTime(from: match.context) ?? extractTime(from: fullText))
             let priority = prioritizedValue(category: category, index: index)
 
             results.append(
                 ScanPickupCode(
-                    code: code,
+                    brandName: brandName,
+                    itemName: itemName,
+                    codeValue: codeValue,
+                    codeLabel: codeLabel,
                     category: category,
-                    merchantName: merchantName,
-                    displayName: merchantName ?? category.fallbackDisplayName,
+                    pickupDate: pickupDate,
+                    pickupTime: pickupTime,
                     source: source,
                     priority: priority
                 )
@@ -615,7 +633,7 @@ enum PickupCodeExtractor {
             if leftPriority != rightPriority {
                 return leftPriority < rightPriority
             }
-            return lhs.code < rhs.code
+            return lhs.codeValue < rhs.codeValue
         }
     }
 
@@ -624,25 +642,8 @@ enum PickupCodeExtractor {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
 
-        if normalized.contains("express") ||
-            normalized.contains("快递") ||
-            normalized.contains("驿站") ||
-            normalized.contains("丰巢") ||
-            normalized.contains("菜鸟") {
-            return .express
-        }
-        if normalized.contains("tea") ||
-            normalized.contains("奶茶") ||
-            normalized.contains("茶饮") ||
-            normalized.contains("喜茶") ||
-            normalized.contains("奈雪") ||
-            normalized.contains("霸王茶姬") ||
-            normalized.contains("茶百道") ||
-            normalized.contains("蜜雪") {
-            return .tea
-        }
-        if normalized.contains("coffee") ||
-            normalized.contains("咖啡") ||
+        if normalized.contains("咖啡") ||
+            normalized.contains("coffee") ||
             normalized.contains("瑞幸") ||
             normalized.contains("星巴克") ||
             normalized.contains("manner") ||
@@ -650,39 +651,67 @@ enum PickupCodeExtractor {
             normalized.contains("幸运咖") {
             return .coffee
         }
-        if normalized.contains("food") ||
-            normalized.contains("餐饮") ||
-            normalized.contains("取餐") ||
-            normalized.contains("外卖") ||
-            normalized.contains("美团") ||
-            normalized.contains("饿了么") {
-            return .food
+        if normalized.contains("饮品") ||
+            normalized.contains("beverage") ||
+            normalized.contains("茶饮") ||
+            normalized.contains("奶茶") ||
+            normalized.contains("喜茶") ||
+            normalized.contains("奈雪") ||
+            normalized.contains("霸王茶姬") ||
+            normalized.contains("茶百道") ||
+            normalized.contains("蜜雪") {
+            return .beverage
         }
-        if normalized.contains("retail") ||
-            normalized.contains("门店") ||
-            normalized.contains("自提") ||
-            normalized.contains("提货") ||
-            normalized.contains("商场") {
-            return .retail
+        if normalized.contains("快递") ||
+            normalized.contains("express") ||
+            normalized.contains("快递") ||
+            normalized.contains("驿站") ||
+            normalized.contains("丰巢") ||
+            normalized.contains("菜鸟") {
+            return .express
         }
         return .other
+    }
+
+    static func normalizedCodeLabel(from rawValue: String?) -> String {
+        let normalized = (rawValue ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if normalized.contains("取餐码") || normalized.contains("取单号") || normalized.contains("叫号") {
+            return String(localized: "取餐码")
+        }
+        return String(localized: "取件码")
+    }
+
+    static func normalizedPickupDate(from rawValue: String?) -> String? {
+        guard let rawValue else { return nil }
+        let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil else {
+            return nil
+        }
+        return normalized
+    }
+
+    static func normalizedPickupTime(from rawValue: String?) -> String? {
+        guard let rawValue else { return nil }
+        let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized.range(of: #"^\d{2}:\d{2}$"#, options: .regularExpression) != nil else {
+            return nil
+        }
+        return normalized
     }
 
     private static func prioritizedValue(category: ScanPickupCategory, index: Int) -> Int {
         let categoryPriority: Int
         switch category {
-        case .express:
-            categoryPriority = 0
-        case .food:
-            categoryPriority = 1
-        case .tea:
-            categoryPriority = 2
         case .coffee:
-            categoryPriority = 3
-        case .retail:
-            categoryPriority = 4
+            categoryPriority = 0
+        case .beverage:
+            categoryPriority = 1
+        case .express:
+            categoryPriority = 2
         case .other:
-            categoryPriority = 5
+            categoryPriority = 3
         }
         return categoryPriority * 100 + index
     }
@@ -727,6 +756,59 @@ enum PickupCodeExtractor {
         return String(cleaned.prefix(24))
     }
 
+    private static func resolvedItemName(
+        lines: [String],
+        context: String,
+        brandName: String,
+        category: ScanPickupCategory
+    ) -> String {
+        let contextItem = normalizedItemName(from: context)
+        if contextItem.isEmpty == false {
+            return contextItem
+        }
+
+        let preferredKeywords = [
+            "拿铁", "美式", "咖啡", "饮品", "奶茶", "茶", "包裹", "快递", "外卖", "顺丰", "京东", "中通", "圆通", "申通", "韵达"
+        ]
+        if let nearbyLine = lines.first(where: { line in
+            let lowered = line.lowercased()
+            let isCodeLine = lowered.contains("取件码") ||
+                lowered.contains("取货码") ||
+                lowered.contains("取餐码") ||
+                lowered.contains("取单号")
+            guard isCodeLine == false else { return false }
+            return preferredKeywords.contains { lowered.contains($0) }
+        }) {
+            let candidate = normalizedItemName(from: nearbyLine)
+            if candidate.isEmpty == false {
+                return candidate
+            }
+        }
+
+        let normalizedBrand = brandName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedBrand.isEmpty == false {
+            return normalizedBrand
+        }
+        return category.fallbackItemName
+    }
+
+    private static func normalizedItemName(from text: String) -> String {
+        let cleaned = text
+            .replacingOccurrences(
+                of: #"(取件码|取货码|取餐码|取单号|订单号|叫号|核销码)\s*[:：#]?\s*[A-Za-z0-9\-_]+"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: #"(下单时间|订单编号|支付方式|实付|原价|优惠券|制作完成|可自取|状态|时间|金额)[:：]?"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(cleaned.prefix(24))
+    }
+
     private static func regexMatches(in text: String) -> [(code: String, context: String)] {
         let pattern = #"(?:取件码|取货码|提货码|取餐码|取单号|订单号|叫号|核销码)\s*[:：#]?\s*([A-Za-z0-9]{2,}(?:[-_][A-Za-z0-9]{1,}){0,4})"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
@@ -752,6 +834,37 @@ enum PickupCodeExtractor {
             return (code: code, context: context)
         }
     }
+
+    private static func extractDate(from text: String) -> String? {
+        let pattern = #"(20\d{2})[.\-/年](\d{1,2})[.\-/月](\d{1,2})"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let nsText = text as NSString
+        let fullRange = NSRange(location: 0, length: nsText.length)
+        guard let match = regex.firstMatch(in: text, options: [], range: fullRange),
+              match.numberOfRanges >= 4 else {
+            return nil
+        }
+        let year = nsText.substring(with: match.range(at: 1))
+        let month = nsText.substring(with: match.range(at: 2))
+        let day = nsText.substring(with: match.range(at: 3))
+        let monthValue = String(format: "%02d", Int(month) ?? 0)
+        let dayValue = String(format: "%02d", Int(day) ?? 0)
+        return "\(year)-\(monthValue)-\(dayValue)"
+    }
+
+    private static func extractTime(from text: String) -> String? {
+        let pattern = #"([01]?\d|2[0-3])[:：]([0-5]\d)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let nsText = text as NSString
+        let fullRange = NSRange(location: 0, length: nsText.length)
+        guard let match = regex.firstMatch(in: text, options: [], range: fullRange),
+              match.numberOfRanges >= 3 else {
+            return nil
+        }
+        let hour = nsText.substring(with: match.range(at: 1))
+        let minute = nsText.substring(with: match.range(at: 2))
+        return String(format: "%02d:%02d", Int(hour) ?? 0, Int(minute) ?? 0)
+    }
 }
 
 private struct AIOCRInsightResponse: Decodable {
@@ -773,10 +886,13 @@ private struct AIOCREventPayload: Decodable {
 }
 
 private struct AIOCRPickupPayload: Decodable {
-    let code: String
+    let brandName: String?
+    let itemName: String?
+    let codeValue: String
+    let codeLabel: String?
     let category: String?
-    let merchantName: String?
-    let displayName: String?
+    let pickupDate: String?
+    let pickupTime: String?
     let priority: Int?
 }
 

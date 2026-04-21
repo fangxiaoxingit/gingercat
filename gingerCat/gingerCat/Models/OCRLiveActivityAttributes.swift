@@ -11,7 +11,13 @@ struct OCRLiveActivityAttributes: ActivityAttributes {
         let summary: String
         let dateText: String
         let isPickupPriority: Bool
-        let pickupText: String?
+        let pickupBrandName: String?
+        let pickupItemName: String?
+        let pickupCodeLabel: String?
+        let pickupCodeValue: String?
+        let pickupCategory: String?
+        let pickupDate: String?
+        let pickupTime: String?
         let pickupExtraCount: Int
     }
 

@@ -176,7 +176,7 @@ extension ScanRecord {
             if leftPriority != rightPriority {
                 return leftPriority < rightPriority
             }
-            return lhs.code < rhs.code
+            return lhs.codeValue < rhs.codeValue
         }.first
     }
 
@@ -254,78 +254,173 @@ struct ScanTodoEvent: Codable, Hashable {
 }
 
 enum ScanPickupCategory: String, Codable, CaseIterable {
-    case express
-    case tea
-    case coffee
-    case food
-    case retail
-    case other
+    case coffee = "咖啡"
+    case beverage = "饮品"
+    case express = "快递"
+    case other = "其他"
 
-    var fallbackDisplayName: String {
+    var displayName: String { rawValue }
+
+    var fallbackItemName: String {
         switch self {
-        case .express:
-            return String(localized: "快递")
-        case .tea:
-            return String(localized: "茶饮")
         case .coffee:
             return String(localized: "咖啡")
-        case .food:
-            return String(localized: "餐饮")
-        case .retail:
-            return String(localized: "门店")
+        case .beverage:
+            return String(localized: "饮品")
+        case .express:
+            return String(localized: "快递")
         case .other:
-            return String(localized: "其他取件")
+            return String(localized: "其他")
+        }
+    }
+
+    var systemImageName: String {
+        switch self {
+        case .coffee:
+            return "cup.and.saucer.fill"
+        case .beverage:
+            return "takeoutbag.and.cup.and.straw.fill"
+        case .express:
+            return "truck.box.fill"
+        case .other:
+            return "shippingbox.fill"
         }
     }
 }
 
 struct ScanPickupCode: Codable, Hashable {
-    var code: String
+    var brandName: String
+    var itemName: String
+    var codeValue: String
+    var codeLabel: String
     var category: ScanPickupCategory
-    var merchantName: String?
-    var displayName: String
+    var pickupDate: String?
+    var pickupTime: String?
     var source: String?
     var priority: Int?
 
     init(
-        code: String,
+        brandName: String?,
+        itemName: String? = nil,
+        codeValue: String,
+        codeLabel: String,
         category: ScanPickupCategory,
-        merchantName: String?,
-        displayName: String? = nil,
+        pickupDate: String? = nil,
+        pickupTime: String? = nil,
         source: String? = nil,
         priority: Int? = nil
     ) {
-        let normalizedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedMerchantName = merchantName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedDisplayName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedBrand = brandName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let normalizedItem = itemName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let normalizedCode = codeValue.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let normalizedLabel = codeLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDate = pickupDate?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedTime = pickupTime?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        self.code = normalizedCode
+        let resolvedBrand = normalizedBrand.isEmpty ? String(localized: "其他") : normalizedBrand
+        let resolvedItem: String
+        if normalizedItem.isEmpty == false {
+            resolvedItem = normalizedItem
+        } else if normalizedBrand.isEmpty == false {
+            resolvedItem = normalizedBrand
+        } else {
+            resolvedItem = category.fallbackItemName
+        }
+
+        self.brandName = resolvedBrand
+        self.itemName = resolvedItem
+        self.codeValue = normalizedCode
+        self.codeLabel = normalizedLabel == String(localized: "取餐码")
+            ? String(localized: "取餐码")
+            : String(localized: "取件码")
         self.category = category
-        self.merchantName = normalizedMerchantName?.isEmpty == true ? nil : normalizedMerchantName
-        self.displayName = (normalizedDisplayName?.isEmpty == false)
-            ? (normalizedDisplayName ?? category.fallbackDisplayName)
-            : category.fallbackDisplayName
+        self.pickupDate = normalizedDate?.isEmpty == true ? nil : normalizedDate
+        self.pickupTime = normalizedTime?.isEmpty == true ? nil : normalizedTime
         self.source = source?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.priority = priority
     }
 
-    var label: String {
-        String(localized: "取件码")
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let brandName = try container.decodeIfPresent(String.self, forKey: .brandName)
+        let itemName = try container.decodeIfPresent(String.self, forKey: .itemName)
+        let codeValue = try container.decode(String.self, forKey: .codeValue)
+        let codeLabel = try container.decodeIfPresent(String.self, forKey: .codeLabel) ?? String(localized: "取件码")
+        let category = try container.decodeIfPresent(ScanPickupCategory.self, forKey: .category) ?? .other
+        let pickupDate = try container.decodeIfPresent(String.self, forKey: .pickupDate)
+        let pickupTime = try container.decodeIfPresent(String.self, forKey: .pickupTime)
+        let source = try container.decodeIfPresent(String.self, forKey: .source)
+        let priority = try container.decodeIfPresent(Int.self, forKey: .priority)
+
+        self.init(
+            brandName: brandName,
+            itemName: itemName,
+            codeValue: codeValue,
+            codeLabel: codeLabel,
+            category: category,
+            pickupDate: pickupDate,
+            pickupTime: pickupTime,
+            source: source,
+            priority: priority
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(brandName, forKey: .brandName)
+        try container.encode(itemName, forKey: .itemName)
+        try container.encode(codeValue, forKey: .codeValue)
+        try container.encode(codeLabel, forKey: .codeLabel)
+        try container.encode(category, forKey: .category)
+        try container.encodeIfPresent(pickupDate, forKey: .pickupDate)
+        try container.encodeIfPresent(pickupTime, forKey: .pickupTime)
+        try container.encodeIfPresent(source, forKey: .source)
+        try container.encodeIfPresent(priority, forKey: .priority)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case brandName
+        case itemName
+        case codeValue
+        case codeLabel
+        case category
+        case pickupDate
+        case pickupTime
+        case source
+        case priority
+    }
+
+    var resolvedBrandName: String {
+        let normalized = brandName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? String(localized: "其他") : normalized
     }
 
     var resolvedDisplayName: String {
-        if let merchantName = merchantName?.trimmingCharacters(in: .whitespacesAndNewlines),
-           merchantName.isEmpty == false {
-            return merchantName
+        resolvedBrandName
+    }
+
+    var resolvedItemName: String {
+        let normalized = itemName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalized.isEmpty == false {
+            return normalized
         }
-        let normalizedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if normalizedDisplayName.isEmpty == false {
-            return normalizedDisplayName
-        }
-        return category.fallbackDisplayName
+        return resolvedBrandName
     }
 
     var summaryText: String {
-        "\(resolvedDisplayName) \(label) \(code)"
+        "\(resolvedBrandName) \(codeLabel) \(codeValue)"
+    }
+
+    var dateTimeText: String? {
+        if let pickupDate, let pickupTime {
+            return "\(pickupDate) \(pickupTime)"
+        }
+        if let pickupDate {
+            return pickupDate
+        }
+        if let pickupTime {
+            return pickupTime
+        }
+        return nil
     }
 }

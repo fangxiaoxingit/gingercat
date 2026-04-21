@@ -591,7 +591,7 @@ struct ArchiveDetailView: View {
         record.eventTitle = primaryPickupCode?.summaryText
         record.eventDate = nil
         record.eventTime = nil
-        record.eventKeywordsText = primaryPickupCode.map { $0.category.fallbackDisplayName } ?? ""
+        record.eventKeywordsText = primaryPickupCode.map { $0.category.displayName } ?? ""
         record.eventDescription = pickupCodes.isEmpty
             ? (payload.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : payload.rawText)
             : pickupDescriptionText(for: pickupCodes)
@@ -622,7 +622,7 @@ struct ArchiveDetailView: View {
             record.eventTitle = primaryPickupCode.summaryText
             record.eventDate = nil
             record.eventTime = nil
-            record.eventKeywordsText = primaryPickupCode.category.fallbackDisplayName
+            record.eventKeywordsText = primaryPickupCode.category.displayName
             record.eventDescription = pickupDescriptionText(for: pickupCodes)
             record.needTodo = false
             record.todoEvents = []
@@ -719,14 +719,17 @@ struct ArchiveDetailView: View {
     private func buildPickupCodes(from insight: AIOCRInsight, rawText: String) -> [ScanPickupCode] {
         var normalized: [ScanPickupCode] = insight.pickupItems.compactMap { item in
             ScanPickupCode(
-                code: item.code,
+                brandName: item.brandName,
+                itemName: item.itemName,
+                codeValue: item.codeValue,
+                codeLabel: item.codeLabel,
                 category: item.category,
-                merchantName: item.merchantName,
-                displayName: item.displayName,
+                pickupDate: item.pickupDate,
+                pickupTime: item.pickupTime,
                 source: "ai",
                 priority: item.priority
             )
-        }.filter { $0.code.isEmpty == false }
+        }.filter { $0.codeValue.isEmpty == false }
 
         if normalized.isEmpty {
             normalized = PickupCodeExtractor.extract(from: rawText)
@@ -737,12 +740,15 @@ struct ArchiveDetailView: View {
             if leftPriority != rightPriority {
                 return leftPriority < rightPriority
             }
-            return lhs.code < rhs.code
+            return lhs.codeValue < rhs.codeValue
         }
     }
 
     private func pickupDescriptionText(for pickupCodes: [ScanPickupCode]) -> String {
-        pickupCodes.map(\.summaryText).joined(separator: "；")
+        pickupCodes.map { pickup in
+            let dateTime = pickup.dateTimeText ?? String(localized: "未知时间")
+            return "\(pickup.summaryText)（\(pickup.category.displayName)，\(dateTime)）"
+        }.joined(separator: "；")
     }
 
     private func ensureRecognitionForAI() async throws -> OCRRecognitionResult {
@@ -810,7 +816,8 @@ struct ArchiveDetailView: View {
         if record.pickupCodes.isEmpty == false {
             let primary = record.primaryPickupCode
             let detailText = record.pickupCodes.map { pickup in
-                "\(pickup.summaryText)（\(pickup.category.fallbackDisplayName)）"
+                let dateTime = pickup.dateTimeText ?? String(localized: "未知时间")
+                return "品牌：\(pickup.resolvedBrandName)\n码值：\(pickup.codeLabel) \(pickup.codeValue)\n商品名称：\(pickup.resolvedItemName)\n商品类型：\(pickup.category.displayName)\n时间：\(dateTime)"
             }.joined(separator: "\n")
             return [
                 RecordInfoModule(
@@ -818,7 +825,7 @@ struct ArchiveDetailView: View {
                     reminderKey: nil,
                     title: primary?.summaryText ?? summaryTitleFallback,
                     detail: detailText.isEmpty ? summaryFallback : detailText,
-                    keywords: Array(Set(record.pickupCodes.map { $0.category.fallbackDisplayName })).sorted(),
+                    keywords: Array(Set(record.pickupCodes.map { $0.category.displayName })).sorted(),
                     dueDate: nil,
                     isTodoCandidate: false,
                     kind: .pickup

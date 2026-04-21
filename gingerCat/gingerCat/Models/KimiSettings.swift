@@ -8,6 +8,7 @@ enum AppSettingsKeys {
     static let haptics = "settings.haptics"
     static let hapticsIntensity = "settings.hapticsIntensity"
     static let appearanceMode = "settings.appearanceMode"
+    static let pickupSchemaMigrationV2Done = "migration.pickupSchema.v2.done"
 }
 
 enum AIProvider: String, CaseIterable, Identifiable {

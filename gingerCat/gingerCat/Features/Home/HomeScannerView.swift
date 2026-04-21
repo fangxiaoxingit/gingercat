@@ -738,7 +738,7 @@ struct HomeScannerView: View {
             summary: summary,
             intent: primaryPickupCode == nil ? .summary : .pickup,
             eventTitle: primaryPickupCode?.summaryText,
-            eventKeywordsText: primaryPickupCode.map { $0.category.fallbackDisplayName } ?? "",
+            eventKeywordsText: primaryPickupCode.map { $0.category.displayName } ?? "",
             eventDescription: detailDescription,
             note: "",
             isOCRCompleted: true,
@@ -1293,7 +1293,7 @@ struct HomeScannerView: View {
                 eventTitle: summary,
                 eventDate: nil,
                 eventTime: nil,
-                eventKeywords: [primaryPickupCode.category.fallbackDisplayName],
+                eventKeywords: [primaryPickupCode.category.displayName],
                 eventDescription: pickupDescriptionText(for: pickupCodes),
                 needTodo: false,
                 isOCRCompleted: true,
@@ -1370,7 +1370,7 @@ struct HomeScannerView: View {
                 eventTitle: summary,
                 eventDate: nil,
                 eventTime: nil,
-                eventKeywords: [primaryPickupCode.category.fallbackDisplayName],
+                eventKeywords: [primaryPickupCode.category.displayName],
                 eventDescription: pickupDescriptionText(for: pickupCodes),
                 needTodo: false,
                 isOCRCompleted: true,
@@ -1439,14 +1439,17 @@ struct HomeScannerView: View {
     private func buildPickupCodes(from insight: AIOCRInsight, rawText: String) -> [ScanPickupCode] {
         var normalized: [ScanPickupCode] = insight.pickupItems.compactMap { item in
             ScanPickupCode(
-                code: item.code,
+                brandName: item.brandName,
+                itemName: item.itemName,
+                codeValue: item.codeValue,
+                codeLabel: item.codeLabel,
                 category: item.category,
-                merchantName: item.merchantName,
-                displayName: item.displayName,
+                pickupDate: item.pickupDate,
+                pickupTime: item.pickupTime,
                 source: "ai",
                 priority: item.priority
             )
-        }.filter { $0.code.isEmpty == false }
+        }.filter { $0.codeValue.isEmpty == false }
 
         if normalized.isEmpty {
             normalized = PickupCodeExtractor.extract(from: rawText)
@@ -1457,13 +1460,16 @@ struct HomeScannerView: View {
             if leftPriority != rightPriority {
                 return leftPriority < rightPriority
             }
-            return lhs.code < rhs.code
+            return lhs.codeValue < rhs.codeValue
         }
     }
 
     private func pickupDescriptionText(for pickupCodes: [ScanPickupCode]) -> String {
         pickupCodes
-            .map(\.summaryText)
+            .map { pickup in
+                let dateTime = pickup.dateTimeText ?? String(localized: "未知时间")
+                return "\(pickup.summaryText)（\(pickup.category.displayName)，\(dateTime)）"
+            }
             .joined(separator: "；")
     }
 

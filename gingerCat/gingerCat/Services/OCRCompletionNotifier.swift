@@ -12,6 +12,7 @@ import ActivityKit
 enum OCRCompletionNotifier {
     static func notify(record: ScanRecord, autoAddedTodoCount: Int = 0) async {
         let isPickupPriority = isPickupRecord(record)
+        let primaryPickup = record.primaryPickupCode
         #if canImport(UIKit)
         // 常规识别维持“仅后台提醒”；取件优先事项前台也允许系统级提醒。
         if UIApplication.shared.applicationState == .active, isPickupPriority == false {
@@ -22,7 +23,6 @@ enum OCRCompletionNotifier {
         let title = completionTitle(for: record)
         let summary = completionSummary(for: record)
         let dateText = completionDateText(for: record)
-        let pickupText = pickupLiveActivityText(for: record)
         let pickupExtraCount = max(record.pickupCodes.count - 1, 0)
 
         if await OCRDynamicIslandService.showIfAvailable(
@@ -31,7 +31,13 @@ enum OCRCompletionNotifier {
             summary: summary,
             dateText: dateText,
             isPickupPriority: isPickupPriority,
-            pickupText: pickupText,
+            pickupBrandName: primaryPickup?.resolvedBrandName,
+            pickupItemName: primaryPickup?.resolvedItemName,
+            pickupCodeLabel: primaryPickup?.codeLabel,
+            pickupCodeValue: primaryPickup?.codeValue,
+            pickupCategory: primaryPickup?.category.displayName,
+            pickupDate: primaryPickup?.pickupDate,
+            pickupTime: primaryPickup?.pickupTime,
             pickupExtraCount: pickupExtraCount
         ) {
             return
@@ -61,7 +67,7 @@ enum OCRCompletionNotifier {
 
     static func completionTitle(for record: ScanRecord) -> String {
         if let pickup = record.primaryPickupCode {
-            return pickup.resolvedDisplayName
+            return pickup.resolvedBrandName
         }
         if let title = record.eventTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
            title.isEmpty == false {
@@ -97,12 +103,7 @@ enum OCRCompletionNotifier {
     }
 
     private static func isPickupRecord(_ record: ScanRecord) -> Bool {
-        record.resolvedIntent == .pickup || record.pickupCodes.isEmpty == false
-    }
-
-    private static func pickupLiveActivityText(for record: ScanRecord) -> String? {
-        guard let pickup = record.primaryPickupCode else { return nil }
-        return pickup.summaryText
+        record.pickupCodes.isEmpty == false
     }
 }
 
@@ -476,7 +477,13 @@ private enum OCRDynamicIslandService {
         summary: String,
         dateText: String,
         isPickupPriority: Bool,
-        pickupText: String?,
+        pickupBrandName: String?,
+        pickupItemName: String?,
+        pickupCodeLabel: String?,
+        pickupCodeValue: String?,
+        pickupCategory: String?,
+        pickupDate: String?,
+        pickupTime: String?,
         pickupExtraCount: Int
     ) async -> Bool {
         #if canImport(ActivityKit)
@@ -499,7 +506,13 @@ private enum OCRDynamicIslandService {
                 summary: summary,
                 dateText: dateText,
                 isPickupPriority: isPickupPriority,
-                pickupText: pickupText,
+                pickupBrandName: pickupBrandName,
+                pickupItemName: pickupItemName,
+                pickupCodeLabel: pickupCodeLabel,
+                pickupCodeValue: pickupCodeValue,
+                pickupCategory: pickupCategory,
+                pickupDate: pickupDate,
+                pickupTime: pickupTime,
                 pickupExtraCount: pickupExtraCount
             )
             let content = ActivityContent(
