@@ -127,24 +127,39 @@ struct OCRLiveActivityWidget: Widget {
     ) -> some View {
         HStack(alignment: .center, spacing: 12) {
             Image(systemName: iconName(for: context.state))
-                .font(.system(size: 28, weight: .semibold))
+                .font(.system(size: 34, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(width: 40, height: 40)
+                .frame(width: 52, height: 52)
 
-            VStack(alignment: .leading, spacing: 6) {
+            if let coffeeName = coffeeCenterText(for: context.state) {
+                Text(coffeeName)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .frame(maxWidth: .infinity, alignment: .center)
+            } else {
+                Spacer(minLength: 0)
+            }
+
+            VStack(alignment: .trailing, spacing: 4) {
                 Text(resolvedPickupCodeLine(for: context.state))
                     .font(.headline)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                     .foregroundStyle(.white)
 
-                Text(resolvedPickupItemLine(for: context.state))
+                Text(resolvedPickupRightSecondaryLine(for: context.state))
                     .font(.subheadline)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.82)
                     .foregroundStyle(Color.white.opacity(0.9))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .multilineTextAlignment(.trailing)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .fixedSize(horizontal: true, vertical: false)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     @ViewBuilder
@@ -237,5 +252,23 @@ struct OCRLiveActivityWidget: Widget {
             return category
         }
         return String(localized: "其他")
+    }
+
+    private func resolvedPickupRightSecondaryLine(for state: OCRLiveActivityAttributes.ContentState) -> String {
+        if let brand = state.pickupBrandName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           brand.isEmpty == false {
+            return brand
+        }
+        if let category = state.pickupCategory?.trimmingCharacters(in: .whitespacesAndNewlines),
+           category.isEmpty == false {
+            return category
+        }
+        return String(localized: "其他")
+    }
+
+    private func coffeeCenterText(for state: OCRLiveActivityAttributes.ContentState) -> String? {
+        guard state.pickupCategory == "咖啡" else { return nil }
+        let item = resolvedPickupItemLine(for: state).trimmingCharacters(in: .whitespacesAndNewlines)
+        return item.isEmpty ? nil : item
     }
 }
