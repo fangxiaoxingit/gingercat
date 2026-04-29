@@ -51,7 +51,7 @@ enum OCRCompletionNotifier {
         }
         let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
         if summary.isEmpty {
-            return String(localized: "识别记录")
+            return String(appLocalized: "识别记录")
         }
         return String(summary.prefix(18))
     }
@@ -66,7 +66,7 @@ enum OCRCompletionNotifier {
         }
         let normalized = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
         if normalized.isEmpty {
-            return String(localized: "识别结果已生成")
+            return String(appLocalized: "识别结果已生成")
         }
         return String(normalized.prefix(80))
     }
@@ -94,11 +94,11 @@ private enum OCRLocalNotificationService {
     ) async {
         let content = UNMutableNotificationContent()
         if isPickupPriority {
-            content.title = String(localized: "识别到取件信息")
+            content.title = String(appLocalized: "识别到取件信息")
         } else {
             content.title = autoAddedTodoCount > 0
-                ? String(localized: "识别完成（已加入待办）")
-                : String(localized: "识别完成")
+                ? String(appLocalized: "识别完成（已加入待办）")
+                : String(appLocalized: "识别完成")
         }
         content.body = "\(title)\n\(summary)\n\(dateText)"
         content.sound = .default
@@ -113,8 +113,8 @@ private enum OCRLocalNotificationService {
         dateText: String
     ) async {
         let content = UNMutableNotificationContent()
-        content.title = String(localized: "AI 摘要失败")
-        content.body = "\(title)\n\(String(localized: "请进入详情页重新尝试 AI 摘要。"))\n\(dateText)"
+        content.title = String(appLocalized: "AI 摘要失败")
+        content.body = "\(title)\n\(String(appLocalized: "请进入详情页重新尝试 AI 摘要。"))\n\(dateText)"
         content.sound = .default
         content.userInfo = userInfo(for: recordID)
 
@@ -223,7 +223,7 @@ enum TodoDueNotificationScheduler {
         }
 
         let content = UNMutableNotificationContent()
-        content.title = String(localized: "今日待办提醒")
+        content.title = String(appLocalized: "今日待办提醒")
         content.body = dueNotificationBody(candidates: candidates)
         content.sound = .default
         content.threadIdentifier = "todo.due.daily"
@@ -321,23 +321,23 @@ enum TodoDueNotificationScheduler {
         if summary.isEmpty == false {
             return String(summary.prefix(24))
         }
-        return String(localized: "待办事项")
+        return String(appLocalized: "待办事项")
     }
 
     private static func dueNotificationBody(candidates: [TodoDueCandidate]) -> String {
         guard let first = candidates.first else {
-            return String(localized: "今天有待办事项需要处理。")
+            return String(appLocalized: "今天有待办事项需要处理。")
         }
 
         if candidates.count == 1 {
-            return String(localized: "「\(first.title)」今天到期，记得处理。")
+            return String(appLocalized: "「\(first.title)」今天到期，记得处理。")
         }
 
         let preview = candidates.prefix(3).map(\.title).joined(separator: "、")
         if candidates.count > 3 {
-            return String(localized: "今天有 \(candidates.count) 条待办：\(preview) 等。")
+            return String(appLocalized: "今天有 \(candidates.count) 条待办：\(preview) 等。")
         }
-        return String(localized: "今天有 \(candidates.count) 条待办：\(preview)。")
+        return String(appLocalized: "今天有 \(candidates.count) 条待办：\(preview)。")
     }
 
     private static func dueReminderDate(

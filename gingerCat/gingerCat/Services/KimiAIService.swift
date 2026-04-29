@@ -9,11 +9,11 @@ enum AIProviderServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidConfiguration(let provider):
-            return String(localized: "\(provider.displayName) 配置不完整，请检查 Base URL / Model / API Key。")
+            return String(appLocalized: "\(provider.displayName) 配置不完整，请检查 Base URL / Model / API Key。")
         case .invalidResponse(let provider):
-            return String(localized: "\(provider.displayName) 返回内容无法解析，请稍后重试。")
+            return String(appLocalized: "\(provider.displayName) 返回内容无法解析，请稍后重试。")
         case .timeout(let provider):
-            return String(localized: "\(provider.displayName) 摘要请求超时，请稍后重试。")
+            return String(appLocalized: "\(provider.displayName) 摘要请求超时，请稍后重试。")
         case .requestFailed(_, let message):
             return message
         }
@@ -163,7 +163,7 @@ enum AIProviderService {
                 statusCode: nil,
                 isSuccess: false,
                 requestPayload: requestPayload,
-                responsePayload: String(localized: "配置不完整，未发起网络请求。"),
+                responsePayload: String(appLocalized: "配置不完整，未发起网络请求。"),
                 errorMessage: error.localizedDescription,
                 totalTokens: nil
             )
@@ -177,7 +177,7 @@ enum AIProviderService {
         request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = requestData
 
-        var responsePayload = String(localized: "暂无返回内容")
+        var responsePayload = String(appLocalized: "暂无返回内容")
         var statusCode: Int?
 
         do {
@@ -194,7 +194,7 @@ enum AIProviderService {
                 let errorMessage = extractErrorMessage(from: data)
                 throw AIProviderServiceError.requestFailed(
                     provider: config.provider,
-                    message: errorMessage ?? String(localized: "\(config.provider.displayName) 请求失败，状态码 \(httpResponse.statusCode)。")
+                    message: errorMessage ?? String(appLocalized: "\(config.provider.displayName) 请求失败，状态码 \(httpResponse.statusCode)。")
                 )
             }
 
@@ -312,7 +312,7 @@ enum AIProviderService {
             guard seenCodes.insert(codeValue).inserted else { return nil }
 
             let category = PickupCodeExtractor.normalizedCategory(from: payload.category)
-            let brandName = cleanedOptional(payload.brandName) ?? String(localized: "其他")
+            let brandName = cleanedOptional(payload.brandName) ?? String(appLocalized: "其他")
             let itemName = cleanedOptional(payload.itemName) ?? brandName
             let codeLabel = PickupCodeExtractor.normalizedCodeLabel(from: payload.codeLabel)
             let pickupDate = PickupCodeExtractor.normalizedPickupDate(from: payload.pickupDate)
@@ -561,7 +561,7 @@ enum AIProviderService {
             return truncatedLogPayload(prettyString)
         }
 
-        let rawString = String(data: data, encoding: .utf8) ?? String(localized: "返回内容无法转为文本。")
+        let rawString = String(data: data, encoding: .utf8) ?? String(appLocalized: "返回内容无法转为文本。")
         return truncatedLogPayload(rawString)
     }
 
@@ -595,7 +595,7 @@ enum PickupCodeExtractor {
             guard codeValue.isEmpty == false else { continue }
             guard dedupedCodes.insert(codeValue).inserted else { continue }
 
-            let brandName = resolvedMerchantName(lines: lines, context: match.context) ?? String(localized: "其他")
+            let brandName = resolvedMerchantName(lines: lines, context: match.context) ?? String(appLocalized: "其他")
             let category = normalizedCategory(
                 from: [match.context, brandName]
                     .compactMap { $0 }
@@ -678,9 +678,9 @@ enum PickupCodeExtractor {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         if normalized.contains("取餐码") || normalized.contains("取单号") || normalized.contains("叫号") {
-            return String(localized: "取餐码")
+            return String(appLocalized: "取餐码")
         }
-        return String(localized: "取件码")
+        return String(appLocalized: "取件码")
     }
 
     static func normalizedPickupDate(from rawValue: String?) -> String? {

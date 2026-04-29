@@ -39,11 +39,11 @@ struct CameraCaptureView: UIViewControllerRepresentable {
                    currentTitle.isEmpty == false {
                     let localizedTitle = switch currentTitle {
                     case "Cancel":
-                        String(localized: "取消")
+                        String(appLocalized: "取消")
                     case "Retake":
-                        String(localized: "重拍")
+                        String(appLocalized: "重拍")
                     case "Use Photo":
-                        String(localized: "使用照片")
+                        String(appLocalized: "使用照片")
                     default:
                         currentTitle
                     }

@@ -37,7 +37,7 @@ enum BackgroundImageImportPipeline {
             imageData: imageData,
             source: source,
             recognizedText: "",
-            summary: String(localized: "正在识别内容..."),
+            summary: String(appLocalized: "正在识别内容..."),
             intent: .summary,
             note: "",
             isOCRCompleted: false,
@@ -146,7 +146,7 @@ enum BackgroundImageImportPipeline {
         guard let image = UIImage(data: imageData) else {
             return BackgroundOCRPipelineResult(
                 recognizedText: "",
-                summary: String(localized: "当前图片格式暂不支持，请重试。"),
+                summary: String(appLocalized: "当前图片格式暂不支持，请重试。"),
                 intent: .summary,
                 eventTitle: nil,
                 eventDate: nil,
@@ -167,7 +167,7 @@ enum BackgroundImageImportPipeline {
         #else
         return BackgroundOCRPipelineResult(
             recognizedText: "",
-            summary: String(localized: "当前平台暂不支持 OCR。"),
+            summary: String(appLocalized: "当前平台暂不支持 OCR。"),
             intent: .summary,
             eventTitle: nil,
             eventDate: nil,
@@ -222,7 +222,7 @@ enum BackgroundImageImportPipeline {
                 return buildPipelineResultFromOCR(
                     payload,
                     lineBoxes: recognition.lineBoxes,
-                    aiFallbackMessage: String(localized: "AI 摘要已开启，但 Kimi 配置不完整，当前仅保留 OCR 文本。")
+                    aiFallbackMessage: String(appLocalized: "AI 摘要已开启，但 Kimi 配置不完整，当前仅保留 OCR 文本。")
                 )
             }
 
@@ -230,7 +230,7 @@ enum BackgroundImageImportPipeline {
         } catch VisionOCRServiceError.noRecognizedText {
             return BackgroundOCRPipelineResult(
                 recognizedText: "",
-                summary: String(localized: "未识别到可用文字，请拍清晰一些或更换图片。"),
+                summary: String(appLocalized: "未识别到可用文字，请拍清晰一些或更换图片。"),
                 intent: .summary,
                 eventTitle: nil,
                 eventDate: nil,
@@ -250,7 +250,7 @@ enum BackgroundImageImportPipeline {
         } catch VisionOCRServiceError.invalidImage {
             return BackgroundOCRPipelineResult(
                 recognizedText: "",
-                summary: String(localized: "当前图片格式暂不支持，请重试。"),
+                summary: String(appLocalized: "当前图片格式暂不支持，请重试。"),
                 intent: .summary,
                 eventTitle: nil,
                 eventDate: nil,
@@ -270,7 +270,7 @@ enum BackgroundImageImportPipeline {
         } catch {
             return BackgroundOCRPipelineResult(
                 recognizedText: "",
-                summary: String(localized: "OCR 识别失败，请稍后再试。"),
+                summary: String(appLocalized: "OCR 识别失败，请稍后再试。"),
                 intent: .summary,
                 eventTitle: nil,
                 eventDate: nil,
@@ -319,7 +319,7 @@ enum BackgroundImageImportPipeline {
         record.usedAISummary = result.usedAISummary
         record.summaryUpdatedAt = result.isOCRCompleted ? .now : record.summaryUpdatedAt
         record.summaryModelName = result.isOCRCompleted
-            ? (result.usedAISummary ? result.summaryModelName : String(localized: "本地摘要"))
+            ? (result.usedAISummary ? result.summaryModelName : String(appLocalized: "本地摘要"))
             : record.summaryModelName
         record.ocrLineBoxes = result.lineBoxes
         try? modelContext.save()
@@ -513,7 +513,7 @@ enum BackgroundImageImportPipeline {
 
     private static func pickupDescriptionText(for pickupCodes: [ScanPickupCode]) -> String {
         pickupCodes.map { pickup in
-            let dateTime = pickup.dateTimeText ?? String(localized: "未知时间")
+            let dateTime = pickup.dateTimeText ?? String(appLocalized: "未知时间")
             return "\(pickup.summaryText)（\(pickup.category.displayName)，\(dateTime)）"
         }.joined(separator: "；")
     }

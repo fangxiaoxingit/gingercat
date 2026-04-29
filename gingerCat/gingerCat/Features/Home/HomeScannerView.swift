@@ -71,7 +71,7 @@ struct HomeScannerView: View {
                 floatingAddButtonLayer
                 toastLayer
             }
-            .navigationTitle(String(localized: "首页"))
+            .navigationTitle(String(appLocalized: "首页"))
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -175,9 +175,9 @@ struct HomeScannerView: View {
             }
             .alert(item: $activeAlert) { alert in
                 Alert(
-                    title: Text(String(localized: "提示")),
+                    title: Text(String(appLocalized: "提示")),
                     message: Text(alert.message),
-                    dismissButton: .default(Text(String(localized: "知道了")))
+                    dismissButton: .default(Text(String(appLocalized: "知道了")))
                 )
             }
             .onDisappear {
@@ -231,7 +231,7 @@ struct HomeScannerView: View {
     private var recentRecordsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text(String(localized: "最近记录"))
+                Text(String(appLocalized: "最近记录"))
                     .font(.title3.weight(.medium))
                     .foregroundStyle(.primary)
 
@@ -253,8 +253,8 @@ struct HomeScannerView: View {
                 homeSectionCard(height: 240) {
                     homeEmptyState(
                         systemImage: "photo.on.rectangle.angled",
-                        title: String(localized: "暂无记录"),
-                        message: String(localized: "扫描图片后，最近三条记录会展示在这里。")
+                        title: String(appLocalized: "暂无记录"),
+                        message: String(appLocalized: "扫描图片后，最近三条记录会展示在这里。")
                     )
                     .padding(20)
                 }
@@ -274,11 +274,11 @@ struct HomeScannerView: View {
     private var pendingTodosSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(String(localized: "最近待办"))
+                Text(String(appLocalized: "最近待办"))
                     .font(.title3.weight(.medium))
                     .foregroundStyle(.primary)
                 
-                Text(String(localized: "识别出时间或事件后，这里会自动显示最近待办"))
+                Text(String(appLocalized: "识别出时间或事件后，这里会自动显示最近待办"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -288,8 +288,8 @@ struct HomeScannerView: View {
                 homeSectionCard(height: 240) {
                     homeEmptyState(
                         systemImage: "checklist",
-                        title: String(localized: "暂无待办"),
-                        message: String(localized: "识别出时间或事件后，这里会自动出现最近待办。")
+                        title: String(appLocalized: "暂无待办"),
+                        message: String(appLocalized: "识别出时间或事件后，这里会自动出现最近待办。")
                     )
                     .padding(20)
                 }
@@ -501,11 +501,11 @@ struct HomeScannerView: View {
                     }
             )
         .contentShape(Circle())
-        .accessibilityLabel(String(localized: "添加识别"))
+        .accessibilityLabel(String(appLocalized: "添加识别"))
         .accessibilityHint(
             isAddMenuExpanded
-                ? String(localized: "点击关闭添加菜单")
-                : String(localized: "点击展开文字、相册和拍照入口")
+                ? String(appLocalized: "点击关闭添加菜单")
+                : String(appLocalized: "点击展开文字、相册和拍照入口")
         )
     }
 
@@ -584,7 +584,7 @@ struct HomeScannerView: View {
             } else if summary.isEmpty == false {
                 resolvedTitle = summary
             } else {
-                resolvedTitle = String(localized: "未命名待办")
+                resolvedTitle = String(appLocalized: "未命名待办")
             }
 
             return PendingTodoItem(
@@ -612,7 +612,7 @@ struct HomeScannerView: View {
         let now = Date()
         let calendar = Calendar.current
         if calendar.isDate(eventDate, inSameDayAs: now) {
-            return String(localized: "今天到期")
+            return String(appLocalized: "今天到期")
         }
 
         guard eventDate > now else {
@@ -623,9 +623,9 @@ struct HomeScannerView: View {
         let eventDay = calendar.startOfDay(for: eventDate)
         let dayDifference = calendar.dateComponents([.day], from: currentDay, to: eventDay).day ?? 0
         if dayDifference <= 0 {
-            return String(localized: "今天到期")
+            return String(appLocalized: "今天到期")
         }
-        return String(localized: "还剩 \(dayDifference) 天")
+        return String(appLocalized: "还剩 \(dayDifference) 天")
     }
 
     @MainActor
@@ -637,12 +637,12 @@ struct HomeScannerView: View {
         do {
             guard let data = try await item.loadTransferable(type: Data.self),
                   let image = UIImage(data: data) else {
-                activeAlert = HomeAlert(message: String(localized: "图片加载失败，请换一张图片重试。"))
+                activeAlert = HomeAlert(message: String(appLocalized: "图片加载失败，请换一张图片重试。"))
                 return
             }
             presentPendingAddConfirmation(for: image, source: "Photo")
         } catch {
-            activeAlert = HomeAlert(message: String(localized: "读取照片失败，请稍后重试。"))
+            activeAlert = HomeAlert(message: String(appLocalized: "读取照片失败，请稍后重试。"))
         }
     }
 
@@ -656,11 +656,11 @@ struct HomeScannerView: View {
         if let titleOverride {
             title = titleOverride
         } else if source == "Camera" {
-            title = String(localized: "确认添加拍照图片")
+            title = String(appLocalized: "确认添加拍照图片")
         } else if source == "Share" {
-            title = String(localized: "确认添加共享图片")
+            title = String(appLocalized: "确认添加共享图片")
         } else {
-            title = String(localized: "确认添加相册图片")
+            title = String(appLocalized: "确认添加相册图片")
         }
 
         pendingAddConfirmation = PendingAddConfirmation(
@@ -689,7 +689,7 @@ struct HomeScannerView: View {
 
         guard let imageData = pendingImport.imageData,
               let image = UIImage(data: imageData) else {
-            activeAlert = HomeAlert(message: String(localized: "共享图片读取失败，请重新分享一次。"))
+            activeAlert = HomeAlert(message: String(appLocalized: "共享图片读取失败，请重新分享一次。"))
             return
         }
 
@@ -703,7 +703,7 @@ struct HomeScannerView: View {
         presentPendingAddConfirmation(
             for: image,
             source: pendingImport.source,
-            titleOverride: String(localized: "确认添加共享图片")
+            titleOverride: String(appLocalized: "确认添加共享图片")
         )
     }
 
@@ -715,7 +715,7 @@ struct HomeScannerView: View {
     ) {
         let cleanedText = recognizedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard cleanedText.isEmpty == false else {
-            activeAlert = HomeAlert(message: String(localized: "共享图片没有识别到可用文字。"))
+            activeAlert = HomeAlert(message: String(appLocalized: "共享图片没有识别到可用文字。"))
             return
         }
 
@@ -731,7 +731,7 @@ struct HomeScannerView: View {
 
         let record = ScanRecord(
             summaryUpdatedAt: .now,
-            summaryModelName: String(localized: "本地摘要"),
+            summaryModelName: String(appLocalized: "本地摘要"),
             imageData: imageData,
             source: source,
             recognizedText: cleanedText,
@@ -747,7 +747,7 @@ struct HomeScannerView: View {
         record.pickupCodes = pickupCodes
         modelContext.insert(record)
         try? modelContext.save()
-        showToast(String(localized: "图片已自动解析并加入记录。"), duration: 2_600_000_000)
+        showToast(String(appLocalized: "图片已自动解析并加入记录。"), duration: 2_600_000_000)
     }
 
     @MainActor
@@ -762,7 +762,7 @@ struct HomeScannerView: View {
     private func enqueueTextForRecognition(_ text: String, source: String) async {
         let sanitizedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard sanitizedText.isEmpty == false else {
-            activeAlert = HomeAlert(message: String(localized: "请输入需要记录的文字内容。"))
+            activeAlert = HomeAlert(message: String(appLocalized: "请输入需要记录的文字内容。"))
             return
         }
 
@@ -770,7 +770,7 @@ struct HomeScannerView: View {
             imageData: nil,
             source: source,
             recognizedText: "",
-            summary: String(localized: "正在处理文字..."),
+            summary: String(appLocalized: "正在处理文字..."),
             intent: .summary,
             note: "",
             isOCRCompleted: false,
@@ -801,7 +801,7 @@ struct HomeScannerView: View {
     @MainActor
     private func enqueueImageForRecognition(_ image: UIImage, source: String) async {
         guard let imageData = image.jpegData(compressionQuality: 0.86) ?? image.pngData() else {
-            activeAlert = HomeAlert(message: String(localized: "当前图片格式暂不支持，请重试。"))
+            activeAlert = HomeAlert(message: String(appLocalized: "当前图片格式暂不支持，请重试。"))
             return
         }
 
@@ -809,7 +809,7 @@ struct HomeScannerView: View {
             imageData: imageData,
             source: source,
             recognizedText: "",
-            summary: String(localized: "正在识别内容..."),
+            summary: String(appLocalized: "正在识别内容..."),
             intent: .summary,
             note: "",
             isOCRCompleted: false,
@@ -877,7 +877,7 @@ struct HomeScannerView: View {
             return buildPipelineResultFromOCR(
                 payload,
                 lineBoxes: [],
-                aiFallbackMessage: String(localized: "AI 摘要已开启，但 Kimi 配置不完整，当前仅保留输入文字。")
+                aiFallbackMessage: String(appLocalized: "AI 摘要已开启，但 Kimi 配置不完整，当前仅保留输入文字。")
             )
         }
 
@@ -894,7 +894,7 @@ struct HomeScannerView: View {
         guard let image = UIImage(data: imageData) else {
             return OCRPipelineResult(
                 recognizedText: "",
-                summary: String(localized: "当前图片格式暂不支持，请重试。"),
+                summary: String(appLocalized: "当前图片格式暂不支持，请重试。"),
                 intent: .summary,
                 eventTitle: nil,
                 eventDate: nil,
@@ -915,7 +915,7 @@ struct HomeScannerView: View {
         #else
         return OCRPipelineResult(
             recognizedText: "",
-            summary: String(localized: "当前平台暂不支持 OCR。"),
+            summary: String(appLocalized: "当前平台暂不支持 OCR。"),
             intent: .summary,
             eventTitle: nil,
             eventDate: nil,
@@ -970,7 +970,7 @@ struct HomeScannerView: View {
                 return buildPipelineResultFromOCR(
                     payload,
                     lineBoxes: recognition.lineBoxes,
-                    aiFallbackMessage: String(localized: "AI 摘要已开启，但 Kimi 配置不完整，当前仅保留 OCR 文本。")
+                    aiFallbackMessage: String(appLocalized: "AI 摘要已开启，但 Kimi 配置不完整，当前仅保留 OCR 文本。")
                 )
             }
 
@@ -978,7 +978,7 @@ struct HomeScannerView: View {
         } catch VisionOCRServiceError.noRecognizedText {
             return OCRPipelineResult(
                 recognizedText: "",
-                summary: String(localized: "未识别到可用文字，请拍清晰一些或更换图片。"),
+                summary: String(appLocalized: "未识别到可用文字，请拍清晰一些或更换图片。"),
                 intent: .summary,
                 eventTitle: nil,
                 eventDate: nil,
@@ -998,7 +998,7 @@ struct HomeScannerView: View {
         } catch VisionOCRServiceError.invalidImage {
             return OCRPipelineResult(
                 recognizedText: "",
-                summary: String(localized: "当前图片格式暂不支持，请重试。"),
+                summary: String(appLocalized: "当前图片格式暂不支持，请重试。"),
                 intent: .summary,
                 eventTitle: nil,
                 eventDate: nil,
@@ -1018,7 +1018,7 @@ struct HomeScannerView: View {
         } catch {
             return OCRPipelineResult(
                 recognizedText: "",
-                summary: String(localized: "OCR 识别失败，请稍后再试。"),
+                summary: String(appLocalized: "OCR 识别失败，请稍后再试。"),
                 intent: .summary,
                 eventTitle: nil,
                 eventDate: nil,
@@ -1066,7 +1066,7 @@ struct HomeScannerView: View {
         record.usedAISummary = result.usedAISummary
         record.summaryUpdatedAt = result.isOCRCompleted ? .now : record.summaryUpdatedAt
         record.summaryModelName = result.isOCRCompleted
-            ? (result.usedAISummary ? result.summaryModelName : String(localized: "本地摘要"))
+            ? (result.usedAISummary ? result.summaryModelName : String(appLocalized: "本地摘要"))
             : record.summaryModelName
         record.ocrLineBoxes = result.lineBoxes
         try? modelContext.save()
@@ -1155,13 +1155,13 @@ struct HomeScannerView: View {
     @MainActor
     private func startCameraFlow() async {
         guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
-            activeAlert = HomeAlert(message: String(localized: "当前设备不支持相机。"))
+            activeAlert = HomeAlert(message: String(appLocalized: "当前设备不支持相机。"))
             return
         }
 
         let granted = await requestCameraPermissionIfNeeded()
         guard granted else {
-            activeAlert = HomeAlert(message: String(localized: "未获得相机权限，请在系统设置中开启相机访问。"))
+            activeAlert = HomeAlert(message: String(appLocalized: "未获得相机权限，请在系统设置中开启相机访问。"))
             return
         }
 
@@ -1230,7 +1230,7 @@ struct HomeScannerView: View {
                     kind: .text,
                     image: nil,
                     source: "Text",
-                    title: String(localized: "确认添加文字")
+                    title: String(appLocalized: "确认添加文字")
                 )
             case .photo:
                 isPhotoPickerPresented = true
@@ -1467,7 +1467,7 @@ struct HomeScannerView: View {
     private func pickupDescriptionText(for pickupCodes: [ScanPickupCode]) -> String {
         pickupCodes
             .map { pickup in
-                let dateTime = pickup.dateTimeText ?? String(localized: "未知时间")
+                let dateTime = pickup.dateTimeText ?? String(appLocalized: "未知时间")
                 return "\(pickup.summaryText)（\(pickup.category.displayName)，\(dateTime)）"
             }
             .joined(separator: "；")
@@ -1499,7 +1499,7 @@ struct HomeScannerView: View {
     @MainActor
     private func showEnqueueToast() {
         showToast(
-            String(localized: "已加入记录，请稍候查看结果。"),
+            String(appLocalized: "已加入记录，请稍候查看结果。"),
             duration: 2_800_000_000
         )
     }
@@ -1617,7 +1617,7 @@ private struct PendingAddConfirmationSheet: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack(spacing: 12) {
-                Button(String(localized: "取消")) {
+                Button(String(appLocalized: "取消")) {
                     onCancel()
                 }
                 .buttonStyle(.bordered)
@@ -1625,7 +1625,7 @@ private struct PendingAddConfirmationSheet: View {
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
 
-                Button(String(localized: "确认添加")) {
+                Button(String(appLocalized: "确认添加")) {
                     onConfirm()
                 }
                 .buttonStyle(.plain)
@@ -1697,16 +1697,16 @@ private struct PendingAddConfirmationSheet: View {
 
     private var aiSummaryStatusText: String {
         aiSummaryEnabled
-            ? String(localized: "AI 摘要：已开启")
-            : String(localized: "AI 摘要：未开启")
+            ? String(appLocalized: "AI 摘要：已开启")
+            : String(appLocalized: "AI 摘要：未开启")
     }
 
     private var modelInfoText: String {
         let model = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
         if model.isEmpty {
-            return String(localized: "当前模型：\(config.provider.displayName)")
+            return String(appLocalized: "当前模型：\(config.provider.displayName)")
         }
-        return String(localized: "当前模型：\(config.provider.displayName) · \(model)")
+        return String(appLocalized: "当前模型：\(config.provider.displayName) · \(model)")
     }
 
     private var confirmDisabled: Bool {
@@ -1806,11 +1806,11 @@ private struct AddMenuActionButton: View {
     private var accessibilityTitle: String {
         switch systemImage {
         case "square.and.pencil":
-            return String(localized: "添加文字")
+            return String(appLocalized: "添加文字")
         case "photo.on.rectangle.angled":
-            return String(localized: "添加相册图片")
+            return String(appLocalized: "添加相册图片")
         case "camera":
-            return String(localized: "添加拍照图片")
+            return String(appLocalized: "添加拍照图片")
         default:
             return systemImage
         }
@@ -1974,7 +1974,7 @@ private struct HomeCollageCard: View {
                 .font(.system(size: 30, weight: .medium))
                 .foregroundStyle(AppTheme.primary.opacity(colorScheme == .dark ? 0.92 : 0.78))
         } else {
-            Text(String(localized: "图片"))
+            Text(String(appLocalized: "图片"))
                 .font(.title2)
                 .foregroundStyle(.primary.opacity(0.7))
         }
@@ -2037,9 +2037,9 @@ private struct RecordDetailDestinationView: View {
                 ArchiveDetailView(record: record)
             } else {
                 ContentUnavailableView(
-                    String(localized: "正在打开记录"),
+                    String(appLocalized: "正在打开记录"),
                     systemImage: "doc.text.magnifyingglass",
-                    description: Text(String(localized: "正在定位这条识别记录，请稍候。"))
+                    description: Text(String(appLocalized: "正在定位这条识别记录，请稍候。"))
                 )
             }
         }

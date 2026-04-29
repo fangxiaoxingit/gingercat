@@ -33,11 +33,11 @@ struct ArchiveView: View {
                 listContainer
             }
         }
-        .navigationTitle(String(localized: "历史记录"))
+        .navigationTitle(String(appLocalized: "历史记录"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Picker(String(localized: "筛选条件"), selection: $selectedFilter) {
+                    Picker(String(appLocalized: "筛选条件"), selection: $selectedFilter) {
                         ForEach(ArchiveRecordFilter.allCases, id: \.self) { option in
                             Text(option.title)
                                 .tag(option)
@@ -48,10 +48,10 @@ struct ArchiveView: View {
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(.primary)
                 }
-                .accessibilityLabel(String(localized: "更多操作"))
+                .accessibilityLabel(String(appLocalized: "更多操作"))
             }
         }
-        .searchable(text: $searchText, prompt: String(localized: "搜索识别内容、摘要或备注"))
+        .searchable(text: $searchText, prompt: String(appLocalized: "搜索识别内容、摘要或备注"))
         .navigationDestination(item: $selectedRecord) { record in
             ArchiveDetailView(record: record)
         }
@@ -78,7 +78,7 @@ struct ArchiveView: View {
                     Button(role: .destructive) {
                         delete(record)
                     } label: {
-                        Label(String(localized: "删除"), systemImage: "trash")
+                        Label(String(appLocalized: "删除"), systemImage: "trash")
                     }
                 }
                 .listRowInsets(EdgeInsets())
@@ -88,7 +88,7 @@ struct ArchiveView: View {
 
             HStack {
                 Spacer(minLength: 0)
-                Text(String(localized: "没有更多记录"))
+                Text(String(appLocalized: "没有更多记录"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
@@ -108,9 +108,9 @@ struct ArchiveView: View {
 
     private var emptyStateView: some View {
         ContentUnavailableView(
-            String(localized: "暂无记录"),
+            String(appLocalized: "暂无记录"),
             systemImage: "tray",
-            description: Text(String(localized: "可通过主页扫描创建记录，或调整搜索关键词。"))
+            description: Text(String(appLocalized: "可通过主页扫描创建记录，或调整搜索关键词。"))
         )
     }
 
@@ -241,19 +241,19 @@ private enum ArchiveRecordFilter: CaseIterable {
     var title: String {
         switch self {
         case .all:
-            return String(localized: "全部记录")
+            return String(appLocalized: "全部记录")
         case .notAdded:
-            return String(localized: "未添加")
+            return String(appLocalized: "未添加")
         case .added:
-            return String(localized: "已添加")
+            return String(appLocalized: "已添加")
         case .notExpired:
-            return String(localized: "未过期")
+            return String(appLocalized: "未过期")
         case .expired:
-            return String(localized: "已过期")
+            return String(appLocalized: "已过期")
         case .recent7Days:
-            return String(localized: "最近 7 天")
+            return String(appLocalized: "最近 7 天")
         case .recentMonth:
-            return String(localized: "最近一个月")
+            return String(appLocalized: "最近一个月")
         }
     }
 }
@@ -312,7 +312,7 @@ private struct ArchiveRowContent: View {
         }
 
         let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        return summary.isEmpty ? String(localized: "正在识别内容...") : summary
+        return summary.isEmpty ? String(appLocalized: "正在识别内容...") : summary
     }
 
     private var metaInfoLine: some View {
@@ -321,11 +321,11 @@ private struct ArchiveRowContent: View {
                 Text(AppDateTimeFormatter.string(from: displayedDate))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(String(localized: "取件 \(record.pickupCodes.count) 条"))
+                Text(String(appLocalized: "取件 \(record.pickupCodes.count) 条"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppTheme.primary)
             } else if isTodoRecord {
-                Text(String(localized: "待办时间：\(AppDateTimeFormatter.string(from: displayedDate))"))
+                Text(String(appLocalized: "待办时间：\(AppDateTimeFormatter.string(from: displayedDate))"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -363,8 +363,8 @@ private struct ArchiveRowContent: View {
     private var todoStatusText: String? {
         guard isTodoRecord else { return nil }
         return hasAddedTodoReminder
-            ? String(localized: "已添加")
-            : String(localized: "未添加")
+            ? String(appLocalized: "已添加")
+            : String(appLocalized: "未添加")
     }
 
     private var displayedDate: Date {

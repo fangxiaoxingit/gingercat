@@ -56,7 +56,7 @@ struct ArchiveDetailView: View {
 
             toastLayer
         }
-        .navigationTitle(String(localized: "记录详情"))
+        .navigationTitle(String(appLocalized: "记录详情"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -65,7 +65,7 @@ struct ArchiveDetailView: View {
                         presentReminderEditor()
                     } label: {
                         Label(
-                            String(localized: "加入待办提醒"),
+                            String(appLocalized: "加入待办提醒"),
                             systemImage: "checklist"
                         )
                     }
@@ -79,7 +79,7 @@ struct ArchiveDetailView: View {
                         }
                     } label: {
                         Label(
-                            isRunningAISummary ? String(localized: "AI摘要总结处理中...") : String(localized: "AI 摘要总结"),
+                            isRunningAISummary ? String(appLocalized: "AI摘要总结处理中...") : String(appLocalized: "AI 摘要总结"),
                             systemImage: "sparkles"
                         )
                     }
@@ -92,7 +92,7 @@ struct ArchiveDetailView: View {
                         }
                     } label: {
                         Label(
-                            isRunningLocalOCR ? String(localized: "文字提取处理中...") : String(localized: "本地提取文字"),
+                            isRunningLocalOCR ? String(appLocalized: "文字提取处理中...") : String(appLocalized: "本地提取文字"),
                             systemImage: "text.viewfinder"
                         )
                     }
@@ -104,7 +104,7 @@ struct ArchiveDetailView: View {
                         isShareCardComposerPresented = true
                     } label: {
                         Label(
-                            String(localized: "卡片分享"),
+                            String(appLocalized: "卡片分享"),
                             systemImage: "square.and.arrow.up.on.square"
                         )
                     }
@@ -114,7 +114,7 @@ struct ArchiveDetailView: View {
                     Button(role: .destructive) {
                         isDeleteConfirmationPresented = true
                     } label: {
-                        Label(String(localized: "删除记录"), systemImage: "trash")
+                        Label(String(appLocalized: "删除记录"), systemImage: "trash")
                     }
                 } label: {
                     Image(systemName: "ellipsis")
@@ -151,19 +151,19 @@ struct ArchiveDetailView: View {
             )
             .presentationDetents([.medium, .large])
         }
-        .alert(String(localized: "确认删除这条记录？"), isPresented: $isDeleteConfirmationPresented) {
-            Button(String(localized: "取消"), role: .cancel) {}
-            Button(String(localized: "删除"), role: .destructive) {
+        .alert(String(appLocalized: "确认删除这条记录？"), isPresented: $isDeleteConfirmationPresented) {
+            Button(String(appLocalized: "取消"), role: .cancel) {}
+            Button(String(appLocalized: "删除"), role: .destructive) {
                 deleteRecord()
             }
         } message: {
-            Text(String(localized: "删除后无法恢复。"))
+            Text(String(appLocalized: "删除后无法恢复。"))
         }
         .alert(item: $reminderFeedback) { feedback in
             Alert(
                 title: Text(feedback.title),
                 message: Text(feedback.message),
-                dismissButton: .default(Text(String(localized: "知道了")))
+                dismissButton: .default(Text(String(appLocalized: "知道了")))
             )
         }
         .onDisappear {
@@ -218,7 +218,7 @@ struct ArchiveDetailView: View {
                             .padding(.horizontal, 8)
                             .padding(.vertical, 6)
 
-                        Label(String(localized: "查看大图"), systemImage: "arrow.up.left.and.arrow.down.right")
+                        Label(String(appLocalized: "查看大图"), systemImage: "arrow.up.left.and.arrow.down.right")
                             .font(.caption.weight(.semibold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
@@ -238,14 +238,14 @@ struct ArchiveDetailView: View {
                                 Image(systemName: "append.page")
                                     .font(.system(size: 44, weight: .medium))
                                     .foregroundStyle(AppTheme.primary.opacity(colorScheme == .dark ? 0.92 : 0.78))
-                                Text(String(localized: "文字记录"))
+                                Text(String(appLocalized: "文字记录"))
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                             } else {
                                 Image(systemName: "photo")
                                     .font(.title2)
                                     .foregroundStyle(.secondary)
-                                Text(String(localized: "暂无图片"))
+                                Text(String(appLocalized: "暂无图片"))
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
@@ -273,12 +273,12 @@ struct ArchiveDetailView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .center, spacing: 12) {
-                    Label(String(localized: "总体摘要"), systemImage: "doc.text.magnifyingglass")
+                    Label(String(appLocalized: "总体摘要"), systemImage: "doc.text.magnifyingglass")
                         .font(.headline)
 
                     Spacer(minLength: 0)
 
-                    Text(String(localized: "待办 \(pendingTodoCount)/\(reminderModuleCount)"))
+                    Text(String(appLocalized: "待办 \(pendingTodoCount)/\(reminderModuleCount)"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.orange)
                         .padding(.horizontal, 10)
@@ -311,14 +311,14 @@ struct ArchiveDetailView: View {
                         Button {
                             presentReminderEditor(for: module)
                         } label: {
-                            Label(String(localized: "加入待办"), systemImage: "checklist")
+                            Label(String(appLocalized: "加入待办"), systemImage: "checklist")
                                 .font(.caption.weight(.semibold))
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.mini)
                         .tint(AppTheme.primary)
                     } else if isReminderAdded(for: module) {
-                        Label(String(localized: "已添加"), systemImage: "checkmark.circle.fill")
+                        Label(String(appLocalized: "已添加"), systemImage: "checkmark.circle.fill")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(AppTheme.primary)
                     }
@@ -327,23 +327,23 @@ struct ArchiveDetailView: View {
                 Divider()
 
                 detailField(
-                    title: String(localized: "标题"),
+                    title: String(appLocalized: "标题"),
                     content: module.title
                 )
 
                 detailField(
-                    title: String(localized: "详细内容"),
+                    title: String(appLocalized: "详细内容"),
                     content: module.detail
                 )
 
                 detailField(
-                    title: String(localized: "关键词"),
+                    title: String(appLocalized: "关键词"),
                     content: module.keywordsText
                 )
 
                 if module.kind != .pickup {
                     detailField(
-                        title: String(localized: "待办提醒时间"),
+                        title: String(appLocalized: "待办提醒时间"),
                         content: module.dueDateText
                     )
                 }
@@ -357,8 +357,8 @@ struct ArchiveDetailView: View {
 
     private var recordMetaFootnote: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(String(localized: "创建时间：\(AppDateTimeFormatter.string(from: record.createdAt))"))
-            Text(String(localized: "摘要更新时间：\(summaryUpdatedTimeText)"))
+            Text("\(String(appLocalized: "创建时间"))：\(AppDateTimeFormatter.string(from: record.createdAt))")
+            Text("\(String(appLocalized: "摘要更新时间"))：\(summaryUpdatedTimeText)")
         }
         .font(.caption2)
         .foregroundStyle(.secondary)
@@ -368,7 +368,7 @@ struct ArchiveDetailView: View {
     private var noteCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 8) {
-                Label(String(localized: "备注"), systemImage: "square.and.pencil")
+                Label(String(appLocalized: "备注"), systemImage: "square.and.pencil")
                     .font(.headline)
                 TextEditor(text: $record.note)
                     .frame(minHeight: 120)
@@ -418,17 +418,17 @@ struct ArchiveDetailView: View {
             showRepeatTodoHintInEditor = false
             selectedReminderEventKey = nil
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "添加成功"),
-                message: String(localized: "已加入系统提醒事项，你可以前往提醒事项 App 查看。")
+                title: String(appLocalized: "添加成功"),
+                message: String(appLocalized: "已加入系统提醒事项，你可以前往提醒事项 App 查看。")
             )
         } catch let error as ReminderServiceError {
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "添加失败"),
+                title: String(appLocalized: "添加失败"),
                 message: error.localizedDescription
             )
         } catch {
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "添加失败"),
+                title: String(appLocalized: "添加失败"),
                 message: error.localizedDescription
             )
         }
@@ -445,7 +445,7 @@ struct ArchiveDetailView: View {
 
     @MainActor
     private func showGenerationToast() {
-        showToast(String(localized: "正在生成，请稍候查看结果。"), duration: 2_800_000_000)
+        showToast(String(appLocalized: "正在生成，请稍候查看结果。"), duration: 2_800_000_000)
     }
 
     @MainActor
@@ -480,8 +480,8 @@ struct ArchiveDetailView: View {
         guard isRunningLocalOCR == false else { return }
         guard let image = resolvedImage else {
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "文字提取失败"),
-                message: String(localized: "当前记录没有可用图片，无法执行文字提取。")
+                title: String(appLocalized: "文字提取失败"),
+                message: String(appLocalized: "当前记录没有可用图片，无法执行文字提取。")
             )
             return
         }
@@ -493,17 +493,17 @@ struct ArchiveDetailView: View {
             let recognition = try await VisionOCRService.recognize(from: image)
             applyLocalOCRResult(recognition)
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "文字提取完成"),
-                message: String(localized: "已更新识别文本，当前未生成本地摘要。")
+                title: String(appLocalized: "文字提取完成"),
+                message: String(appLocalized: "已更新识别文本，当前未生成本地摘要。")
             )
         } catch VisionOCRServiceError.noRecognizedText {
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "文字提取失败"),
-                message: String(localized: "未识别到可用文字，请更换更清晰的图片。")
+                title: String(appLocalized: "文字提取失败"),
+                message: String(appLocalized: "未识别到可用文字，请更换更清晰的图片。")
             )
         } catch {
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "文字提取失败"),
+                title: String(appLocalized: "文字提取失败"),
                 message: error.localizedDescription
             )
         }
@@ -516,8 +516,8 @@ struct ArchiveDetailView: View {
         let config = AIProviderConfigStore.selectedRuntimeConfig()
         guard config.canRequestSummary else {
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "AI摘要失败"),
-                message: String(localized: "\(config.provider.displayName) 配置不完整，请先到设置中补全 Base URL、Model 与 API Key。")
+                title: String(appLocalized: "AI摘要失败"),
+                message: String(appLocalized: "\(config.provider.displayName) 配置不完整，请先到设置中补全 Base URL、Model 与 API Key。")
             )
             return
         }
@@ -550,25 +550,25 @@ struct ArchiveDetailView: View {
                 try? modelContext.save()
             }
             let successMessage = autoAddResult.addedCount > 0
-                ? String(localized: "已更新标题、详细内容、关键词和日期时间，并自动加入 \(autoAddResult.addedCount) 条待办。")
-                : String(localized: "已更新标题、详细内容、关键词和日期时间。")
+                ? String(appLocalized: "已更新标题、详细内容、关键词和日期时间，并自动加入 \(autoAddResult.addedCount) 条待办。")
+                : String(appLocalized: "已更新标题、详细内容、关键词和日期时间。")
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "AI摘要完成"),
+                title: String(appLocalized: "AI摘要完成"),
                 message: successMessage
             )
         } catch let error as AIProviderServiceError {
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "AI摘要失败"),
+                title: String(appLocalized: "AI摘要失败"),
                 message: error.localizedDescription
             )
         } catch VisionOCRServiceError.noRecognizedText {
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "AI摘要失败"),
-                message: String(localized: "执行AI摘要前未识别到可用文字，请先确保图片内容清晰。")
+                title: String(appLocalized: "AI摘要失败"),
+                message: String(appLocalized: "执行AI摘要前未识别到可用文字，请先确保图片内容清晰。")
             )
         } catch {
             reminderFeedback = ReminderFeedback(
-                title: String(localized: "AI摘要失败"),
+                title: String(appLocalized: "AI摘要失败"),
                 message: error.localizedDescription
             )
         }
@@ -603,7 +603,7 @@ struct ArchiveDetailView: View {
         record.isOCRCompleted = true
         record.usedAISummary = false
         record.summaryUpdatedAt = .now
-        record.summaryModelName = String(localized: "本地摘要")
+        record.summaryModelName = String(appLocalized: "本地摘要")
         try? modelContext.save()
     }
 
@@ -746,7 +746,7 @@ struct ArchiveDetailView: View {
 
     private func pickupDescriptionText(for pickupCodes: [ScanPickupCode]) -> String {
         pickupCodes.map { pickup in
-            let dateTime = pickup.dateTimeText ?? String(localized: "未知时间")
+            let dateTime = pickup.dateTimeText ?? String(appLocalized: "未知时间")
             return "\(pickup.summaryText)（\(pickup.category.displayName)，\(dateTime)）"
         }.joined(separator: "；")
     }
@@ -792,7 +792,7 @@ struct ArchiveDetailView: View {
             return title
         }
         let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        return summary.isEmpty ? String(localized: "无") : String(summary.prefix(40))
+        return summary.isEmpty ? String(appLocalized: "无") : String(summary.prefix(40))
     }
 
     private var resolvedDetailText: String {
@@ -801,23 +801,23 @@ struct ArchiveDetailView: View {
             return description
         }
         let summary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        return summary.isEmpty ? String(localized: "无") : summary
+        return summary.isEmpty ? String(appLocalized: "无") : summary
     }
 
     private var resolvedKeywords: String {
         let keywords = record.eventKeywords
-        return keywords.isEmpty ? String(localized: "无") : keywords.joined(separator: " / ")
+        return keywords.isEmpty ? String(appLocalized: "无") : keywords.joined(separator: " / ")
     }
 
     private var recordInfoModules: [RecordInfoModule] {
         let normalizedSummary = record.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        let summaryFallback = normalizedSummary.isEmpty ? String(localized: "无") : normalizedSummary
-        let summaryTitleFallback = normalizedSummary.isEmpty ? String(localized: "无") : String(normalizedSummary.prefix(40))
+        let summaryFallback = normalizedSummary.isEmpty ? String(appLocalized: "无") : normalizedSummary
+        let summaryTitleFallback = normalizedSummary.isEmpty ? String(appLocalized: "无") : String(normalizedSummary.prefix(40))
         if record.pickupCodes.isEmpty == false {
             let primary = record.primaryPickupCode
             let detailText = record.pickupCodes.map { pickup in
-                let dateTime = pickup.dateTimeText ?? String(localized: "未知时间")
-                return "品牌：\(pickup.resolvedBrandName)\n码值：\(pickup.codeLabel) \(pickup.codeValue)\n商品名称：\(pickup.resolvedItemName)\n商品类型：\(pickup.category.displayName)\n时间：\(dateTime)"
+                let dateTime = pickup.dateTimeText ?? String(appLocalized: "未知时间")
+                return "\(String(appLocalized: "品牌"))：\(pickup.resolvedBrandName)\n\(String(appLocalized: "码值"))：\(pickup.codeLabel) \(pickup.codeValue)\n\(String(appLocalized: "商品名称"))：\(pickup.resolvedItemName)\n\(String(appLocalized: "商品类型"))：\(pickup.category.displayName)\n\(String(appLocalized: "时间"))：\(dateTime)"
             }.joined(separator: "\n")
             return [
                 RecordInfoModule(
@@ -908,17 +908,18 @@ struct ArchiveDetailView: View {
 
     private func moduleTitle(for module: RecordInfoModule, at index: Int) -> String {
         if module.kind == .pickup {
-            return String(localized: "取件信息")
+            return String(appLocalized: "取件信息")
         }
+        let baseTitle = String(appLocalized: "记录信息")
         if recordInfoModules.count > 1 {
-            return String(localized: "记录信息 \(index + 1)")
+            return "\(baseTitle) \(index + 1)"
         }
-        return String(localized: "记录信息")
+        return baseTitle
     }
 
     private var summaryUpdatedTimeText: String {
         guard let updatedAt = record.summaryUpdatedAt ?? (record.isOCRCompleted ? record.createdAt : nil) else {
-            return String(localized: "无")
+            return String(appLocalized: "无")
         }
         let sourceName = (record.summaryModelName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let timestamp = AppDateTimeFormatter.string(from: updatedAt)
@@ -1029,7 +1030,7 @@ private struct ArchiveShareCardComposerView: View {
             Alert(
                 title: Text(feedback.title),
                 message: Text(feedback.message),
-                dismissButton: .default(Text(String(localized: "知道了")))
+                dismissButton: .default(Text(String(appLocalized: "知道了")))
             )
         }
     }
@@ -1043,7 +1044,7 @@ private struct ArchiveShareCardComposerView: View {
             Spacer()
 
             // 中间标题
-            Text(String(localized: "分享预览"))
+            Text(String(appLocalized: "分享预览"))
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
 
@@ -1142,7 +1143,7 @@ private struct ArchiveShareCardComposerView: View {
            appName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
             return appName
         }
-        return String(localized: "大橘小事")
+        return String(appLocalized: "大橘小事")
     }
 
     private var shareTitle: String {
@@ -1156,7 +1157,7 @@ private struct ArchiveShareCardComposerView: View {
             return String(summary.prefix(32))
         }
 
-        return String(localized: "识别记录")
+        return String(appLocalized: "识别记录")
     }
 
     private var shareContent: String {
@@ -1175,14 +1176,14 @@ private struct ArchiveShareCardComposerView: View {
             return recognizedText
         }
 
-        return String(localized: "暂无详细内容")
+        return String(appLocalized: "暂无详细内容")
     }
 
     private func shareCardImage() {
         guard let image = renderedCardImage() else {
             feedback = ShareCardFeedback(
-                title: String(localized: "分享失败"),
-                message: String(localized: "卡片渲染失败，请稍后重试。")
+                title: String(appLocalized: "分享失败"),
+                message: String(appLocalized: "卡片渲染失败，请稍后重试。")
             )
             return
         }
@@ -1196,8 +1197,8 @@ private struct ArchiveShareCardComposerView: View {
 
         guard let image = renderedCardImage() else {
             feedback = ShareCardFeedback(
-                title: String(localized: "保存失败"),
-                message: String(localized: "卡片渲染失败，请稍后重试。")
+                title: String(appLocalized: "保存失败"),
+                message: String(appLocalized: "卡片渲染失败，请稍后重试。")
             )
             return
         }
@@ -1205,12 +1206,12 @@ private struct ArchiveShareCardComposerView: View {
         do {
             try await ShareCardPhotoLibrarySaver.save(image: image)
             feedback = ShareCardFeedback(
-                title: String(localized: "保存成功"),
-                message: String(localized: "卡片已保存到系统相册。")
+                title: String(appLocalized: "保存成功"),
+                message: String(appLocalized: "卡片已保存到系统相册。")
             )
         } catch {
             feedback = ShareCardFeedback(
-                title: String(localized: "保存失败"),
+                title: String(appLocalized: "保存失败"),
                 message: error.localizedDescription
             )
         }
@@ -1367,9 +1368,9 @@ private enum ShareCardSaveError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .permissionDenied:
-            return String(localized: "没有相册写入权限，请在系统设置中允许后重试。")
+            return String(appLocalized: "没有相册写入权限，请在系统设置中允许后重试。")
         case .saveFailed:
-            return String(localized: "保存到相册失败，请稍后重试。")
+            return String(appLocalized: "保存到相册失败，请稍后重试。")
         }
     }
 }
@@ -1383,49 +1384,49 @@ enum ShareCardColorDataSource {
     static let forestGreen = ShareCardColor(
         id: "forestGreen",
         hex: "#346739",
-        displayName: "森林绿"
+        displayName: String(appLocalized: "森林绿")
     )
 
     /// 海洋蓝
     static let oceanBlue = ShareCardColor(
         id: "oceanBlue",
         hex: "#344CB7",
-        displayName: "海洋蓝"
+        displayName: String(appLocalized: "海洋蓝")
     )
 
     /// 珊瑚红
     static let coralRed = ShareCardColor(
         id: "coralRed",
         hex: "#A31D1D",
-        displayName: "珊瑚红"
+        displayName: String(appLocalized: "珊瑚红")
     )
 
     /// 日落橙
     static let sunsetOrange = ShareCardColor(
         id: "sunsetOrange",
         hex: "#dc5400",
-        displayName: "日落橙"
+        displayName: String(appLocalized: "日落橙")
     )
 
     /// 深紫
     static let deepPurple = ShareCardColor(
         id: "deepPurple",
         hex: "#4b18ab",
-        displayName: "深紫"
+        displayName: String(appLocalized: "深紫")
     )
 
     /// 黄色
     static let mintGreen = ShareCardColor(
         id: "mintGreen",
         hex: "#e3b32f",
-        displayName: "薄荷绿"
+        displayName: String(appLocalized: "薄荷绿")
     )
 
     /// 石板灰
     static let slateGray = ShareCardColor(
         id: "slateGray",
         hex: "#29292f",
-        displayName: "石板灰"
+        displayName: String(appLocalized: "石板灰")
     )
 
     /// 所有颜色数组
@@ -1680,13 +1681,13 @@ private struct RecordInfoModule: Identifiable, Hashable {
 
     var keywordsText: String {
         keywords.isEmpty
-            ? String(localized: "无")
+            ? String(appLocalized: "无")
             : keywords.joined(separator: " / ")
     }
 
     var dueDateText: String {
         guard let dueDate else {
-            return String(localized: "无")
+            return String(appLocalized: "无")
         }
         return AppDateTimeFormatter.string(from: dueDate)
     }
@@ -1726,7 +1727,7 @@ private struct ReminderDraft {
             resolvedTitle = eventTitle
         } else {
             let fallback = (record.eventDescription ?? record.summary).trimmingCharacters(in: .whitespacesAndNewlines)
-            resolvedTitle = fallback.isEmpty ? String(localized: "识别记录提醒") : String(fallback.prefix(40))
+            resolvedTitle = fallback.isEmpty ? String(appLocalized: "识别记录提醒") : String(fallback.prefix(40))
         }
 
         var noteLines: [String] = []
@@ -1735,16 +1736,16 @@ private struct ReminderDraft {
             noteLines.append(note)
         }
         if let moduleDescription = module?.detail.trimmingCharacters(in: .whitespacesAndNewlines), moduleDescription.isEmpty == false {
-            noteLines.append(String(localized: "事件描述：\(moduleDescription)"))
+            noteLines.append(String(appLocalized: "事件描述：\(moduleDescription)"))
         } else if let description = record.eventDescription?.trimmingCharacters(in: .whitespacesAndNewlines), description.isEmpty == false {
-            noteLines.append(String(localized: "事件描述：\(description)"))
+            noteLines.append(String(appLocalized: "事件描述：\(description)"))
         } else {
-            let label = record.usedAISummary ? String(localized: "摘要") : String(localized: "识别内容")
+            let label = record.usedAISummary ? String(appLocalized: "摘要") : String(appLocalized: "识别内容")
             noteLines.append("\(label)：\(record.summary)")
         }
         let keywords = module?.keywords ?? record.eventKeywords
         if keywords.isEmpty == false {
-            noteLines.append(String(localized: "关键词：\(keywords.joined(separator: "、"))"))
+            noteLines.append(String(appLocalized: "关键词：\(keywords.joined(separator: "、"))"))
         }
 
         self.title = resolvedTitle
@@ -1766,7 +1767,7 @@ private struct ReminderDraftEditorView: View {
             Form {
                 if showRepeatHint {
                     Section {
-                        Text(String(localized: "该记录已添加过待办提醒，继续添加会创建重复待办。"))
+                        Text(String(appLocalized: "该记录已添加过待办提醒，继续添加会创建重复待办。"))
                             .font(.footnote)
                             .foregroundStyle(.orange)
                             .frame(maxWidth: .infinity, alignment: .center)
@@ -1774,30 +1775,28 @@ private struct ReminderDraftEditorView: View {
                     }
                 }
 
-                Section(String(localized: "待办内容")) {
-                    TextField(String(localized: "标题"), text: $draft.title)
-                    TextField(String(localized: "备注"), text: $draft.notes, axis: .vertical)
+                Section(String(appLocalized: "待办内容")) {
+                    TextField(String(appLocalized: "标题"), text: $draft.title)
+                    TextField(String(appLocalized: "备注"), text: $draft.notes, axis: .vertical)
                         .lineLimit(3...6)
                 }
 
-                Section(String(localized: "时间")) {
-                    Toggle(String(localized: "设置提醒时间"), isOn: $draft.hasDueDate)
+                Section(String(appLocalized: "时间")) {
+                    Toggle(String(appLocalized: "设置提醒时间"), isOn: $draft.hasDueDate)
                     if draft.hasDueDate {
                         DatePicker(
-                            String(localized: "日期时间"),
+                            String(appLocalized: "日期时间"),
                             selection: $draft.dueDate,
                             displayedComponents: [.date, .hourAndMinute]
                         )
-                        .environment(\.locale, Locale(identifier: "zh_CN"))
                     }
                 }
             }
-            .environment(\.locale, Locale(identifier: "zh_CN"))
-            .navigationTitle(String(localized: "加入待办事项"))
+            .navigationTitle(String(appLocalized: "加入待办事项"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(String(localized: "取消")) {
+                    Button(String(appLocalized: "取消")) {
                         onCancel()
                     }
                     .disabled(isSaving)
@@ -1811,7 +1810,7 @@ private struct ReminderDraftEditorView: View {
                             ProgressView()
                                 .controlSize(.small)
                         } else {
-                            Text(String(localized: "确认添加"))
+                            Text(String(appLocalized: "确认添加"))
                         }
                     }
                     .buttonStyle(.borderedProminent)

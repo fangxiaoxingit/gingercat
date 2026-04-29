@@ -8,9 +8,9 @@ enum ReminderServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .permissionDenied:
-            return String(localized: "未获得提醒事项权限，请在系统设置中允许访问后重试。")
+            return String(appLocalized: "未获得提醒事项权限，请在系统设置中允许访问后重试。")
         case .noCalendarAvailable:
-            return String(localized: "未找到可用提醒列表，请先在系统提醒事项中创建列表。")
+            return String(appLocalized: "未找到可用提醒列表，请先在系统提醒事项中创建列表。")
         }
     }
 }
@@ -47,7 +47,7 @@ final class ReminderService {
 
         let reminder = EKReminder(eventStore: eventStore)
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        reminder.title = trimmedTitle.isEmpty ? String(localized: "识别记录提醒") : trimmedTitle
+        reminder.title = trimmedTitle.isEmpty ? String(appLocalized: "识别记录提醒") : trimmedTitle
 
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedNotes.isEmpty == false {
@@ -109,7 +109,7 @@ final class ReminderService {
             return String(summary.prefix(40))
         }
 
-        return String(localized: "识别记录提醒")
+        return String(appLocalized: "识别记录提醒")
     }
 
     private func reminderNotes(for record: ScanRecord, event: ScanTodoEvent?) -> String {

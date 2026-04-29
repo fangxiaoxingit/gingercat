@@ -264,13 +264,13 @@ enum ScanPickupCategory: String, Codable, CaseIterable {
     var fallbackItemName: String {
         switch self {
         case .coffee:
-            return String(localized: "咖啡")
+            return String(appLocalized: "咖啡")
         case .beverage:
-            return String(localized: "饮品")
+            return String(appLocalized: "饮品")
         case .express:
-            return String(localized: "快递")
+            return String(appLocalized: "快递")
         case .other:
-            return String(localized: "其他")
+            return String(appLocalized: "其他")
         }
     }
 
@@ -317,7 +317,7 @@ struct ScanPickupCode: Codable, Hashable {
         let normalizedDate = pickupDate?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedTime = pickupTime?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let resolvedBrand = normalizedBrand.isEmpty ? String(localized: "其他") : normalizedBrand
+        let resolvedBrand = normalizedBrand.isEmpty ? String(appLocalized: "其他") : normalizedBrand
         let resolvedItem: String
         if normalizedItem.isEmpty == false {
             resolvedItem = normalizedItem
@@ -330,9 +330,9 @@ struct ScanPickupCode: Codable, Hashable {
         self.brandName = resolvedBrand
         self.itemName = resolvedItem
         self.codeValue = normalizedCode
-        self.codeLabel = normalizedLabel == String(localized: "取餐码")
-            ? String(localized: "取餐码")
-            : String(localized: "取件码")
+        self.codeLabel = normalizedLabel == String(appLocalized: "取餐码")
+            ? String(appLocalized: "取餐码")
+            : String(appLocalized: "取件码")
         self.category = category
         self.pickupDate = normalizedDate?.isEmpty == true ? nil : normalizedDate
         self.pickupTime = normalizedTime?.isEmpty == true ? nil : normalizedTime
@@ -345,7 +345,7 @@ struct ScanPickupCode: Codable, Hashable {
         let brandName = try container.decodeIfPresent(String.self, forKey: .brandName)
         let itemName = try container.decodeIfPresent(String.self, forKey: .itemName)
         let codeValue = try container.decode(String.self, forKey: .codeValue)
-        let codeLabel = try container.decodeIfPresent(String.self, forKey: .codeLabel) ?? String(localized: "取件码")
+        let codeLabel = try container.decodeIfPresent(String.self, forKey: .codeLabel) ?? String(appLocalized: "取件码")
         let category = try container.decodeIfPresent(ScanPickupCategory.self, forKey: .category) ?? .other
         let pickupDate = try container.decodeIfPresent(String.self, forKey: .pickupDate)
         let pickupTime = try container.decodeIfPresent(String.self, forKey: .pickupTime)
@@ -392,7 +392,7 @@ struct ScanPickupCode: Codable, Hashable {
 
     var resolvedBrandName: String {
         let normalized = brandName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return normalized.isEmpty ? String(localized: "其他") : normalized
+        return normalized.isEmpty ? String(appLocalized: "其他") : normalized
     }
 
     var resolvedDisplayName: String {

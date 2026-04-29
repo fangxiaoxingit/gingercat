@@ -3,6 +3,7 @@ import SwiftData
 
 struct ContentView: View {
     @AppStorage(KimiSettingsKeys.appearanceMode) private var appearanceModeRaw = AppearanceMode.automatic.rawValue
+    @AppStorage(KimiSettingsKeys.language) private var languageRaw = AppLanguage.automatic.rawValue
     @EnvironmentObject private var externalImportCenter: ExternalImportCenter
     
     private var colorScheme: ColorScheme? {
@@ -15,10 +16,15 @@ struct ContentView: View {
             return .dark
         }
     }
+
+    private var locale: Locale {
+        (AppLanguage(rawValue: languageRaw) ?? .automatic).locale
+    }
     
     var body: some View {
         HomeScannerView()
             .preferredColorScheme(colorScheme)
+            .environment(\.locale, locale)
             .onOpenURL { url in
                 // 深链优先处理记录跳转，其次再处理导入唤醒，避免通知点击被导入分支吞掉。
                 if let recordID = AppDeepLink.recordID(from: url) {

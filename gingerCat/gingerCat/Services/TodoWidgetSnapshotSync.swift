@@ -147,7 +147,7 @@ enum TodoWidgetSnapshotSync {
         if let value = trimmedNonEmpty(record.recognizedText) {
             return String(value.prefix(50))
         }
-        return String(localized: "待办事项")
+        return String(appLocalized: "待办事项")
     }
 
     private static func trimmedNonEmpty(_ value: String?) -> String? {

@@ -28,14 +28,14 @@ struct InsightDrawerView: View {
                     }
                 }
             }
-            .navigationTitle(String(localized: "结果分析"))
+            .navigationTitle(String(appLocalized: "结果分析"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(String(localized: "关闭"), action: dismiss.callAsFunction)
+                    Button(String(appLocalized: "关闭"), action: dismiss.callAsFunction)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(String(localized: "保存到历史"), action: saveRecord)
+                    Button(String(appLocalized: "保存到历史"), action: saveRecord)
                         .fontWeight(.semibold)
                 }
             }
@@ -58,14 +58,14 @@ struct InsightDrawerView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Label(
-                        payload.summarySource == .ai ? String(localized: "AI 摘要") : String(localized: "识别文本"),
+                        payload.summarySource == .ai ? String(appLocalized: "AI 摘要") : String(appLocalized: "识别文本"),
                         systemImage: payload.summarySource == .ai ? "sparkles.rectangle.stack" : "text.quote"
                     )
                     .font(.headline)
 
                     Spacer(minLength: 0)
 
-                    Text(payload.summarySource == .ai ? String(localized: "Kimi") : String(localized: "OCR"))
+                    Text(payload.summarySource == .ai ? String(appLocalized: "Kimi") : String(appLocalized: "OCR"))
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
@@ -89,12 +89,12 @@ struct InsightDrawerView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Label(String(localized: "意图判定"), systemImage: "shield.checkered")
+                    Label(String(appLocalized: "意图判定"), systemImage: "shield.checkered")
                         .font(.headline)
 
                     Spacer()
 
-                    Text(payload.mode == .schedule ? String(localized: "日程模式") : String(localized: "总结模式"))
+                    Text(payload.mode == .schedule ? String(appLocalized: "日程模式") : String(appLocalized: "总结模式"))
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
@@ -110,7 +110,7 @@ struct InsightDrawerView: View {
                         Button {
                             // Placeholder: future CalendarManager integration.
                         } label: {
-                            Label(String(localized: "写入日历（预留）"), systemImage: "calendar.badge.plus")
+                            Label(String(appLocalized: "写入日历（预留）"), systemImage: "calendar.badge.plus")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.glassProminent)
@@ -119,7 +119,7 @@ struct InsightDrawerView: View {
                         Button {
                             // Placeholder: future CalendarManager integration.
                         } label: {
-                            Label(String(localized: "写入日历（预留）"), systemImage: "calendar.badge.plus")
+                            Label(String(appLocalized: "写入日历（预留）"), systemImage: "calendar.badge.plus")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
@@ -127,7 +127,7 @@ struct InsightDrawerView: View {
                         .disabled(true)
                     }
                 } else {
-                    Text(String(localized: "当前内容未识别到完整时间信息，已自动隐藏写入日历能力。"))
+                    Text(String(appLocalized: "当前内容未识别到完整时间信息，已自动隐藏写入日历能力。"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -138,10 +138,10 @@ struct InsightDrawerView: View {
     private var noteCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
-                Label(String(localized: "备注"), systemImage: "text.bubble")
+                Label(String(appLocalized: "备注"), systemImage: "text.bubble")
                     .font(.headline)
 
-                TextField(String(localized: "添加备注（可选）"), text: $note, axis: .vertical)
+                TextField(String(appLocalized: "添加备注（可选）"), text: $note, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
             }
         }

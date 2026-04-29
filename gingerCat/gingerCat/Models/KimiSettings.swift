@@ -8,6 +8,7 @@ enum AppSettingsKeys {
     static let haptics = "settings.haptics"
     static let hapticsIntensity = "settings.hapticsIntensity"
     static let appearanceMode = "settings.appearanceMode"
+    static let language = "settings.language"
     static let pickupSchemaMigrationV2Done = "migration.pickupSchema.v2.done"
 }
 
@@ -35,13 +36,13 @@ enum AIProvider: String, CaseIterable, Identifiable {
     var detailText: String {
         switch self {
         case .deepSeek:
-            return String(localized: "深度求索")
+            return String(appLocalized: "深度求索")
         case .kimi:
-            return String(localized: "Moonshot AI")
+            return String(appLocalized: "Moonshot AI")
         case .miniMax:
-            return String(localized: "MiniMax")
+            return String(appLocalized: "MiniMax")
         case .thirdParty:
-            return String(localized: "OpenAI")
+            return String(appLocalized: "OpenAI")
         }
     }
 
@@ -124,12 +125,12 @@ enum AIProvider: String, CaseIterable, Identifiable {
 
     var baseURLPlaceholder: String {
         let trimmed = defaultBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? String(localized: "请填写 Base URL") : trimmed
+        return trimmed.isEmpty ? String(appLocalized: "请填写 Base URL") : trimmed
     }
 
     var modelPlaceholder: String {
         let trimmed = defaultModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? String(localized: "请填写模型名称") : trimmed
+        return trimmed.isEmpty ? String(appLocalized: "请填写模型名称") : trimmed
     }
 }
 
@@ -229,6 +230,7 @@ enum KimiSettingsKeys {
     static let haptics = AppSettingsKeys.haptics
     static let hapticsIntensity = AppSettingsKeys.hapticsIntensity
     static let appearanceMode = AppSettingsKeys.appearanceMode
+    static let language = AppSettingsKeys.language
 }
 
 enum HapticFeedbackIntensity: String, CaseIterable {
@@ -239,11 +241,11 @@ enum HapticFeedbackIntensity: String, CaseIterable {
     var displayName: String {
         switch self {
         case .weak:
-            return String(localized: "弱")
+            return String(appLocalized: "弱")
         case .medium:
-            return String(localized: "中")
+            return String(appLocalized: "中")
         case .strong:
-            return String(localized: "强")
+            return String(appLocalized: "强")
         }
     }
 }
@@ -256,11 +258,11 @@ enum AppearanceMode: String, CaseIterable {
     var displayName: String {
         switch self {
         case .automatic:
-            return String(localized: "自动")
+            return String(appLocalized: "自动")
         case .light:
-            return String(localized: "浅色")
+            return String(appLocalized: "浅色")
         case .dark:
-            return String(localized: "深色")
+            return String(appLocalized: "深色")
         }
     }
 
@@ -273,6 +275,70 @@ enum AppearanceMode: String, CaseIterable {
         case .dark:
             return "moon"
         }
+    }
+}
+
+enum AppLanguage: String, CaseIterable {
+    case automatic = "automatic"
+    case english = "en"
+    case chinese = "zh-Hans"
+
+    var displayName: String {
+        switch self {
+        case .automatic:
+            return String(appLocalized: "自动")
+        case .english:
+            return String(appLocalized: "英文")
+        case .chinese:
+            return String(appLocalized: "中文")
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .automatic:
+            return "globe"
+        case .english:
+            return "character.book.closed"
+        case .chinese:
+            return "character.textbox"
+        }
+    }
+
+    var locale: Locale {
+        switch self {
+        case .automatic:
+            return .autoupdatingCurrent
+        case .english, .chinese:
+            return Locale(identifier: rawValue)
+        }
+    }
+
+    var localizationBundle: Bundle {
+        switch self {
+        case .automatic:
+            return .main
+        case .english, .chinese:
+            guard let path = Bundle.main.path(forResource: rawValue, ofType: "lproj"),
+                  let bundle = Bundle(path: path) else {
+                return .main
+            }
+            return bundle
+        }
+    }
+}
+
+enum AppLocalization {
+    static var bundle: Bundle {
+        let rawValue = UserDefaults.standard.string(forKey: AppSettingsKeys.language) ?? AppLanguage.automatic.rawValue
+        let language = AppLanguage(rawValue: rawValue) ?? .automatic
+        return language.localizationBundle
+    }
+}
+
+extension String {
+    init(appLocalized keyAndValue: String.LocalizationValue) {
+        self.init(localized: keyAndValue, bundle: AppLocalization.bundle)
     }
 }
 

@@ -7,9 +7,9 @@ enum AIProviderRequestOperation: String, Codable, Hashable {
     var displayName: String {
         switch self {
         case .configTest:
-            return String(localized: "配置测试")
+            return String(appLocalized: "配置测试")
         case .ocrAnalysis:
-            return String(localized: "OCR 分析")
+            return String(appLocalized: "OCR 分析")
         }
     }
 }
@@ -66,7 +66,7 @@ struct AIProviderRequestLogEntry: Codable, Identifiable, Hashable {
 
     var totalTokensText: String? {
         guard let totalTokens else { return nil }
-        return String(localized: "总计 \(totalTokens) tokens")
+        return String(appLocalized: "总计 \(totalTokens) tokens")
     }
 }
 
