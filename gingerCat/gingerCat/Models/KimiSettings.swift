@@ -283,6 +283,17 @@ enum AppLanguage: String, CaseIterable {
     case english = "en"
     case chinese = "zh-Hans"
 
+    var nativeDisplayName: String {
+        switch self {
+        case .automatic:
+            return "System"
+        case .english:
+            return "English"
+        case .chinese:
+            return "中文"
+        }
+    }
+
     var displayName: String {
         switch self {
         case .automatic:

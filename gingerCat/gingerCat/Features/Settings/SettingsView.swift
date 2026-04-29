@@ -1427,9 +1427,15 @@ private struct AppLanguageSelectionView: View {
                                         .foregroundStyle(AppTheme.primary)
                                         .frame(width: 24)
 
-                                    Text(language.displayName)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.primary)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(language.nativeDisplayName)
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(.primary)
+
+                                        Text(language.displayName)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
 
                                     Spacer(minLength: 0)
 

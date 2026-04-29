@@ -65,11 +65,7 @@ struct ArchiveView: View {
                     selectedRecord = record
                 } label: {
                     ArchiveRowContent(record: record)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(rowCardBackgroundColor)
-                                .shadow(color: rowCardShadowColor, radius: 12, x: 0, y: 6)
-                        )
+                        .modifier(ArchiveRowCardModifier(colorScheme: colorScheme))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
                 }
@@ -216,16 +212,34 @@ struct ArchiveView: View {
         }
     }
 
-    private var rowCardBackgroundColor: Color {
-        colorScheme == .dark
-            ? Color(uiColor: .secondarySystemBackground)
-            : .white
-    }
+}
 
-    private var rowCardShadowColor: Color {
-        colorScheme == .dark
-            ? Color.black.opacity(0.22)
-            : Color.black.opacity(0.08)
+private struct ArchiveRowCardModifier: ViewModifier {
+    let colorScheme: ColorScheme
+
+    func body(content: Content) -> some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                content
+                    .background(.clear)
+                    .glassEffect(
+                        .regular.tint(colorScheme == .dark ? .white.opacity(0.04) : .white.opacity(0.22)),
+                        in: .rect(cornerRadius: 16, style: .continuous)
+                    )
+            } else {
+                content
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(colorScheme == .dark ? Color(uiColor: .secondarySystemBackground) : .white)
+                            .shadow(
+                                color: colorScheme == .dark ? Color.black.opacity(0.22) : Color.black.opacity(0.08),
+                                radius: 12,
+                                x: 0,
+                                y: 6
+                            )
+                    )
+            }
+        }
     }
 }
 

@@ -205,7 +205,7 @@ struct HomeScannerView: View {
 
     private var homeWireframeLayout: some View {
         Group {
-            if #available(iOS 26.0, *), colorScheme == .light {
+            if #available(iOS 26.0, *) {
                 GlassEffectContainer(spacing: 24) {
                     homeWireframeContent
                 }
@@ -295,8 +295,8 @@ struct HomeScannerView: View {
                 }
             } else {
                 homeSectionCard(minHeight: 240, alignment: .topLeading) {
-                    VStack(spacing: 0) {
-                        ForEach(Array(pendingTodos.enumerated()), id: \.element.id) { index, item in
+                    VStack(spacing: 10) {
+                        ForEach(Array(pendingTodos.enumerated()), id: \.element.id) { _, item in
                             Button {
                                 triggerHaptic()
                                 presentRecordDetail(item.record.id, source: .manual)
@@ -305,17 +305,18 @@ struct HomeScannerView: View {
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 14)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .fill(pendingTodoRowBackgroundColor)
+                                            .shadow(color: pendingTodoRowShadowColor, radius: 8, x: 0, y: 4)
+                                    )
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-
-                            if index < pendingTodos.count - 1 {
-                                Divider()
-                                    .padding(.leading, 56)
-                            }
                         }
                     }
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 8)
                 }
             }
         }
@@ -327,22 +328,37 @@ struct HomeScannerView: View {
         alignment: Alignment = .center,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        ZStack(alignment: alignment) {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(moduleBackgroundColor)
+        Group {
+            if #available(iOS 26.0, *) {
+                ZStack(alignment: alignment) {
+                    content()
+                }
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: minHeight)
+                .frame(height: height)
+                .glassEffect(
+                    .regular.tint(accentGlassTint),
+                    in: .rect(cornerRadius: 16, style: .continuous)
+                )
+            } else {
+                ZStack(alignment: alignment) {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(moduleBackgroundColor)
 
-            content()
+                    content()
+                }
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: minHeight)
+                .frame(height: height)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .shadow(
+                    color: colorScheme == .dark ? Color.black.opacity(0.22) : Color.black.opacity(0.08),
+                    radius: colorScheme == .dark ? 14 : 12,
+                    x: 0,
+                    y: colorScheme == .dark ? 8 : 6
+                )
+            }
         }
-        .frame(maxWidth: .infinity)
-        .frame(minHeight: minHeight)
-        .frame(height: height)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(
-            color: colorScheme == .dark ? Color.black.opacity(0.22) : Color.black.opacity(0.08),
-            radius: colorScheme == .dark ? 14 : 12,
-            x: 0,
-            y: colorScheme == .dark ? 8 : 6
-        )
     }
 
     private func homeEmptyState(systemImage: String, title: String, message: String) -> some View {
@@ -521,6 +537,18 @@ struct HomeScannerView: View {
         colorScheme == .dark ? Color.white.opacity(0.72) : Color.black.opacity(0.58)
     }
 
+    private var pendingTodoRowBackgroundColor: Color {
+        colorScheme == .dark
+            ? Color(uiColor: .secondarySystemBackground)
+            : .white
+    }
+
+    private var pendingTodoRowShadowColor: Color {
+        colorScheme == .dark
+            ? Color.black.opacity(0.2)
+            : Color.black.opacity(0.08)
+    }
+
     private var todoWidgetSyncSignatures: [TodoWidgetSyncSignature] {
         records.map { record in
             TodoWidgetSyncSignature(
@@ -625,7 +653,8 @@ struct HomeScannerView: View {
         if dayDifference <= 0 {
             return String(appLocalized: "今天到期")
         }
-        return String(appLocalized: "还剩 \(dayDifference) 天")
+        let remainingDaysFormat = String(appLocalized: "还剩 %d 天")
+        return String(format: remainingDaysFormat, dayDifference)
     }
 
     @MainActor

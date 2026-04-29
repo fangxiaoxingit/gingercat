@@ -208,9 +208,6 @@ struct ArchiveDetailView: View {
                     isImagePreviewPresented = true
                 } label: {
                     ZStack(alignment: .bottomTrailing) {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(Color(uiColor: .secondarySystemBackground))
-
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFit()
@@ -226,33 +223,32 @@ struct ArchiveDetailView: View {
                             .padding(12)
                     }
                     .frame(maxWidth: .infinity, minHeight: 120, maxHeight: 120)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .detailHeroSurfaceStyle(cornerRadius: 18, colorScheme: colorScheme)
                 }
                 .buttonStyle(.plain)
             } else {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color(uiColor: .tertiarySystemBackground))
-                    .overlay {
-                        VStack(spacing: 8) {
-                            if record.imageData == nil {
-                                Image(systemName: "append.page")
-                                    .font(.system(size: 44, weight: .medium))
-                                    .foregroundStyle(AppTheme.primary.opacity(colorScheme == .dark ? 0.92 : 0.78))
-                                Text(String(appLocalized: "文字记录"))
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Image(systemName: "photo")
-                                    .font(.title2)
-                                    .foregroundStyle(.secondary)
-                                Text(String(appLocalized: "暂无图片"))
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
+                ZStack {
+                    VStack(spacing: 8) {
+                        if record.imageData == nil {
+                            Image(systemName: "append.page")
+                                .font(.system(size: 44, weight: .medium))
+                                .foregroundStyle(AppTheme.primary.opacity(colorScheme == .dark ? 0.92 : 0.78))
+                            Text(String(appLocalized: "文字记录"))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Image(systemName: "photo")
+                                .font(.title2)
+                                .foregroundStyle(.secondary)
+                            Text(String(appLocalized: "暂无图片"))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 120, maxHeight: 120)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 120, maxHeight: 120)
+                .detailHeroSurfaceStyle(cornerRadius: 18, colorScheme: colorScheme)
             }
         }
     }
@@ -314,9 +310,8 @@ struct ArchiveDetailView: View {
                             Label(String(appLocalized: "加入待办"), systemImage: "checklist")
                                 .font(.caption.weight(.semibold))
                         }
-                        .buttonStyle(.borderedProminent)
                         .controlSize(.mini)
-                        .tint(AppTheme.primary)
+                        .detailPrimaryActionStyle()
                     } else if isReminderAdded(for: module) {
                         Label(String(appLocalized: "已添加"), systemImage: "checkmark.circle.fill")
                             .font(.caption.weight(.semibold))
@@ -1473,6 +1468,36 @@ struct ShareCardColor: Identifiable, Equatable, Hashable {
 // MARK: - Liquid Glass Extensions
 
 private extension View {
+    @ViewBuilder
+    func detailHeroSurfaceStyle(cornerRadius: CGFloat, colorScheme: ColorScheme) -> some View {
+        if #available(iOS 26.0, *) {
+            self
+                .background(.clear)
+                .glassEffect(
+                    .regular.tint(colorScheme == .dark ? .white.opacity(0.04) : .white.opacity(0.22)),
+                    in: .rect(cornerRadius: cornerRadius, style: .continuous)
+                )
+        } else {
+            self
+                .background(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(colorScheme == .dark ? Color(uiColor: .secondarySystemBackground) : Color(uiColor: .tertiarySystemBackground))
+                )
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        }
+    }
+
+    @ViewBuilder
+    func detailPrimaryActionStyle() -> some View {
+        if #available(iOS 26.0, *) {
+            self.buttonStyle(.glassProminent)
+        } else {
+            self
+                .buttonStyle(.borderedProminent)
+                .tint(AppTheme.primary)
+        }
+    }
+
     @ViewBuilder
     func glassButtonStyle() -> some View {
         if #available(iOS 26, *) {
