@@ -92,6 +92,7 @@ enum AIProviderService {
             }
             return normalized
         }()
+        let languageHint = inferredOutputLanguageHint(from: normalizedRawText)
         let nowContext = currentDateContext()
         let content = try await withTimeout(seconds: 20, provider: config.provider) {
             try await requestCompletionContent(
@@ -105,7 +106,11 @@ enum AIProviderService {
                     ],
                     [
                         "role": "user",
-                        "content": userPrompt(rawText: normalizedRawText, currentDateContext: nowContext)
+                        "content": userPrompt(
+                            rawText: normalizedRawText,
+                            currentDateContext: nowContext,
+                            languageHint: languageHint
+                        )
                     ]
                 ],
                 config: config,
@@ -388,11 +393,17 @@ enum AIProviderService {
         return payload
     }
 
-    private static func userPrompt(rawText: String, currentDateContext: String) -> String {
+    private static func userPrompt(
+        rawText: String,
+        currentDateContext: String,
+        languageHint: OutputLanguageHint
+    ) -> String {
             """
             你需要先理解 OCR 文本，再输出摘要、事件信息和取件信息。只输出标准 JSON，无多余文字。
             当前时间基准（必须严格使用，禁止自行假设）：
             - \(currentDateContext)
+            语言推断预判（优先遵守，除非文本出现更强反证）：
+            - \(languageHint.promptLabel)
 
             核心规则（严格执行，优先级从高到低）：
             1. 【年份推断逻辑】
@@ -477,6 +488,26 @@ enum AIProviderService {
             """
         }
 
+    private enum OutputLanguageHint {
+        case chinese
+        case english
+        case mixed
+        case unknown
+
+        var promptLabel: String {
+            switch self {
+            case .chinese:
+                return "中文主导（summary/title/keywords/description/events 文本字段优先输出中文）"
+            case .english:
+                return "英文主导（summary/title/keywords/description/events 文本字段优先输出英文）"
+            case .mixed:
+                return "中英混合（按主导语义输出；若存在完整英文句子且数量明显更多，优先英文）"
+            case .unknown:
+                return "语言不明确（尽量贴近原文，不额外翻译）"
+            }
+        }
+    }
+
     private static let promptDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
@@ -512,6 +543,58 @@ enum AIProviderService {
             options: .regularExpression
         )
         return collapsedSpaces.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func inferredOutputLanguageHint(from text: String) -> OutputLanguageHint {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return .unknown }
+
+        var latinLetterCount = 0
+        var cjkCharacterCount = 0
+        for scalar in trimmed.unicodeScalars {
+            switch scalar.value {
+            case 0x41...0x5A, 0x61...0x7A:
+                latinLetterCount += 1
+            case 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF:
+                cjkCharacterCount += 1
+            default:
+                continue
+            }
+        }
+
+        let englishWordCount = trimmed
+            .split { $0.isWhitespace || $0.isNewline || $0.isPunctuation || $0.isSymbol }
+            .filter { token in
+                token.count >= 2 && token.allSatisfy { character in
+                    guard let scalar = character.unicodeScalars.first, character.unicodeScalars.count == 1 else {
+                        return false
+                    }
+                    switch scalar.value {
+                    case 0x41...0x5A, 0x61...0x7A:
+                        return true
+                    default:
+                        return false
+                    }
+                }
+            }
+            .count
+
+        if latinLetterCount == 0 && cjkCharacterCount == 0 {
+            return .unknown
+        }
+        if latinLetterCount >= 24 && englishWordCount >= 6 && latinLetterCount >= cjkCharacterCount * 2 {
+            return .english
+        }
+        if cjkCharacterCount >= 16 && cjkCharacterCount * 10 >= latinLetterCount * 12 {
+            return .chinese
+        }
+        if englishWordCount >= 8 && latinLetterCount >= cjkCharacterCount {
+            return .english
+        }
+        if cjkCharacterCount > latinLetterCount {
+            return .chinese
+        }
+        return .mixed
     }
 
     private static func cleanedOptional(_ value: String?) -> String? {
