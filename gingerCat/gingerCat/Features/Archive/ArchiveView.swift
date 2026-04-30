@@ -335,19 +335,28 @@ private struct ArchiveRowContent: View {
                 Text(AppDateTimeFormatter.string(from: displayedDate))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(String(appLocalized: "取件 \(record.pickupCodes.count) 条"))
+                Text(String(
+                    format: String(appLocalized: "取件 %d 条"),
+                    record.pickupCodes.count
+                ))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppTheme.primary)
             } else if isTodoRecord {
-                Text(String(appLocalized: "待办时间：\(AppDateTimeFormatter.string(from: displayedDate))"))
+                Text(String(
+                    format: String(appLocalized: "待办时间：%@"),
+                    AppDateTimeFormatter.string(from: displayedDate)
+                ))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if let todoStatusText {
-                    Text(todoStatusText)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(hasAddedTodoReminder ? AppTheme.primary : AppTheme.primaryDark)
-                }
+                Image(systemName: hasAddedTodoReminder ? "checkmark.circle" : "circle")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(hasAddedTodoReminder ? AppTheme.primary : AppTheme.primaryDark)
+                    .accessibilityLabel(
+                        hasAddedTodoReminder
+                            ? String(appLocalized: "已添加")
+                            : String(appLocalized: "未添加")
+                    )
             } else {
                 Text(AppDateTimeFormatter.string(from: displayedDate))
                     .font(.caption)
@@ -372,13 +381,6 @@ private struct ArchiveRowContent: View {
             return true
         }
         return record.hasAddedTodoReminder
-    }
-
-    private var todoStatusText: String? {
-        guard isTodoRecord else { return nil }
-        return hasAddedTodoReminder
-            ? String(appLocalized: "已添加")
-            : String(appLocalized: "未添加")
     }
 
     private var displayedDate: Date {

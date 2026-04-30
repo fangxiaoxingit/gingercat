@@ -274,7 +274,11 @@ struct ArchiveDetailView: View {
 
                     Spacer(minLength: 0)
 
-                    Text(String(appLocalized: "待办 \(pendingTodoCount)/\(reminderModuleCount)"))
+                    Text(String(
+                        format: String(appLocalized: "待办 %d/%d"),
+                        pendingTodoCount,
+                        reminderModuleCount
+                    ))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.orange)
                         .padding(.horizontal, 10)

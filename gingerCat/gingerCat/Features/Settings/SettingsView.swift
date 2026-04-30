@@ -116,7 +116,7 @@ struct SettingsView: View {
                 Image("BrandLogo")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 58, height: 58)
+                    .frame(width: 74, height: 74)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -137,10 +137,11 @@ struct SettingsView: View {
                     Text(String(appLocalized: "截图识别、待办整理、取件提醒"))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer(minLength: 0)
             }
         }
     }
@@ -189,7 +190,7 @@ struct SettingsView: View {
                 Label(String(appLocalized: "AI 总结"), systemImage: "sparkles")
                     .font(.headline)
                 Toggle(String(appLocalized: "启用 AI 总结"), isOn: $aiSummaryEnabled)
-                Text(String(appLocalized: "默认关闭。开启后会在 OCR 结果基础上调用模型生成摘要。"))
+                Text(String(appLocalized: "开启后会在 OCR 结果基础上调用模型生成摘要。"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -262,7 +263,10 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        Text(String(appLocalized: "当前模型：\(config.model)"))
+                        Text(String(
+                            format: String(appLocalized: "当前模型：%@"),
+                            config.model
+                        ))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -285,18 +289,14 @@ struct SettingsView: View {
                     selectedProviderRaw: $selectedProviderRaw
                 )
             } label: {
-                HStack(spacing: 6) {
-                    Text(String(appLocalized: "配置"))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(minWidth: 52)
+                Image(systemName: "slider.horizontal.3")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 44, minHeight: 44)
                 .padding(.vertical, 10)
                 .contentShape(Rectangle())
             }
+            .accessibilityLabel(String(appLocalized: "配置"))
             .buttonStyle(.plain)
         }
     }
@@ -634,7 +634,7 @@ private struct AIProviderConfigView: View {
 
                     settingSecureField(
                         title: String(appLocalized: "API Key"),
-                        placeholder: String(appLocalized: "API Key（由用户自行填写）"),
+                        placeholder: String(appLocalized: "请输入 API Key"),
                         text: binding(for: .apiKey)
                     )
                     .textInputAutocapitalization(.never)
@@ -967,8 +967,12 @@ private struct AIProviderConfigView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             TextField(placeholder, text: text)
-                .padding(10)
-                .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .padding(.vertical, 8)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.18))
+                        .frame(height: 1)
+                }
         }
     }
 
@@ -978,8 +982,12 @@ private struct AIProviderConfigView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             SecureField(placeholder, text: text)
-                .padding(10)
-                .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .padding(.vertical, 8)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.18))
+                        .frame(height: 1)
+                }
         }
     }
 
@@ -1468,6 +1476,8 @@ private struct AppLanguageSelectionView: View {
 }
 
 private struct AppUsageGuideView: View {
+    private let shortcutsURL = URL(string: "https://www.icloud.com/shortcuts/08727ff88e284f70bbe1d915f5a8b725")
+
     private let sections: [AppUsageGuideSection] = [
         AppUsageGuideSection(
             iconName: "square.and.pencil",
@@ -1553,6 +1563,66 @@ private struct AppUsageGuideView: View {
                 }
             }
 
+            if let shortcutsURL {
+                AppUsageGuideCard(cornerRadius: 22) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Link(destination: shortcutsURL) {
+                            HStack(spacing: 14) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(AppTheme.primary.opacity(0.12))
+                                        .frame(width: 46, height: 46)
+
+                                    Image(systemName: "link.badge.plus")
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(AppTheme.primary)
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(String(appLocalized: "安装快捷指令"))
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.primary)
+
+                                    Text(String(appLocalized: "点击跳转到 iCloud 快捷指令链接"))
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        Divider()
+                            .padding(.vertical, 2)
+
+                        Text(String(appLocalized: "选择一种你常用的方式，配合快捷指令快速保存记忆。"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        shortcutAssistRow(
+                            iconName: "button.vertical.left.fill",
+                            text: String(appLocalized: "操作按钮：通过快捷指令 App 的操作按钮执行")
+                        )
+
+                        shortcutAssistRow(
+                            iconName: "dot.circle.and.hand.point.up.left.fill",
+                            text: String(appLocalized: "悬浮按钮：通过辅助触控菜单快速触发")
+                        )
+
+                        shortcutAssistRow(
+                            iconName: "iphone.gen3.radiowaves.left.and.right",
+                            text: String(appLocalized: "背部双击：在辅助功能中绑定快捷指令")
+                        )
+                    }
+                }
+            }
+
             ForEach(sections) { section in
                 AppUsageGuideCard(cornerRadius: 22) {
                     HStack(alignment: .top, spacing: 14) {
@@ -1586,6 +1656,7 @@ private struct AppUsageGuideView: View {
                                     }
                                 }
                             }
+
                         }
 
                         Spacer(minLength: 0)
@@ -1594,6 +1665,20 @@ private struct AppUsageGuideView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func shortcutAssistRow(iconName: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: iconName)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.primary)
+                .frame(width: 16, alignment: .leading)
+
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
