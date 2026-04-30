@@ -35,7 +35,7 @@ private struct StoredExternalImageImportMetadata: Codable {
 }
 
 struct ExternalImageImportStore {
-    static let sharedAppGroupIdentifier = "group.com.siyufang.LivePhotoMakerUniversal.gingerCat"
+    static let sharedAppGroupIdentifier = "group.com.example.GingerCat"
     static let wakeUpURL = URL(string: "gingercat://import-image")
 
     private let fileManager: FileManager

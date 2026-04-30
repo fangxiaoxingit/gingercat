@@ -95,7 +95,7 @@ open gingerCat/gingerCat.xcodeproj
 
 - 在 Xcode 中把主 App、Share Extension、Widget Extension 的 Team 改成你的 Apple Developer Team。
 - 将 Bundle Identifier 改成你自己的反向域名。
-- 将 App Group 从 `group.com.siyufang.LivePhotoMakerUniversal.gingerCat` 改成你自己的 App Group。
+- 将 App Group 从 `group.com.example.GingerCat` 改成你自己的 App Group。
 - 同步修改代码中使用 App Group 的位置：`ExternalImageImportStore.sharedAppGroupIdentifier`、Share Extension 和 Widget 里的共享配置。
 
 4. 运行 `gingerCat` scheme。
@@ -236,7 +236,7 @@ open gingerCat/gingerCat.xcodeproj
 
 - Change the Team for the main app, Share Extension, and Widget Extension.
 - Replace the Bundle Identifiers with your own reverse-DNS identifiers.
-- Replace the App Group `group.com.siyufang.LivePhotoMakerUniversal.gingerCat` with your own App Group.
+- Replace the App Group `group.com.example.GingerCat` with your own App Group.
 - Update every App Group reference in code, including `ExternalImageImportStore.sharedAppGroupIdentifier`, the Share Extension import store, and the Widget shared config.
 
 4. Run the `gingerCat` scheme.

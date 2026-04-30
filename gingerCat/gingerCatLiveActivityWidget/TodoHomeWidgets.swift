@@ -5,7 +5,7 @@ import UIKit
 #endif
 
 private enum TodoWidgetSharedConfig {
-    static let appGroupIdentifier = "group.com.siyufang.LivePhotoMakerUniversal.gingerCat"
+    static let appGroupIdentifier = "group.com.example.GingerCat"
     static let snapshotKey = "widget.todo.snapshot.v1"
     static let latestTodoWidgetKind = "gingercat.todo.latest.small"
     static let recentTodoWidgetKind = "gingercat.todo.recent.medium"

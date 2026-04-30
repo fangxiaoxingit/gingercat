@@ -33,7 +33,7 @@ private struct ShareExtensionStoredMetadata: Codable {
 }
 
 private struct ShareExtensionImportStore {
-    static let appGroupIdentifier = "group.com.siyufang.LivePhotoMakerUniversal.gingerCat"
+    static let appGroupIdentifier = "group.com.example.GingerCat"
 
     // 扩展只负责把图片写进共享容器，数据结构与主 App 保持一致，避免后面两边各修一套协议。
     func queueImageData(
