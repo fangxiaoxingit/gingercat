@@ -260,3 +260,9 @@
 "Moonshot AI" = "Moonshot AI";
 "MiniMax" = "MiniMax";
 "OpenAI" = "OpenAI";
+"首次使用引导" = "Getting Started";
+"跳过" = "Skip";
+"下一步" = "Next";
+"开始使用" = "Start";
+"第 %d/%d 页" = "Page %d/%d";
+"左右滑动切换" = "Swipe left or right";

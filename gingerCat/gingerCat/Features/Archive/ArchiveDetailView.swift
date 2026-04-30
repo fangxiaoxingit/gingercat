@@ -995,7 +995,7 @@ private struct ArchiveShareCardComposerView: View {
                 let cardHeight = cardWidth * 4 / 3
 
                 ArchiveShareCardCanvasView(
-                    appName: appDisplayName,
+                    appName: previewAppName,
                     title: shareTitle,
                     content: shareContent,
                     backgroundColor: selectedCardColor.color
@@ -1133,7 +1133,11 @@ private struct ArchiveShareCardComposerView: View {
         .glassContainerStyle()
     }
 
-    private var appDisplayName: String {
+    private var previewAppName: String {
+        let localizedName = String(appLocalized: "大橘小事").trimmingCharacters(in: .whitespacesAndNewlines)
+        if localizedName.isEmpty == false {
+            return localizedName
+        }
         if let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String,
            displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
             return displayName
@@ -1219,7 +1223,7 @@ private struct ArchiveShareCardComposerView: View {
     @MainActor
     private func renderedCardImage() -> UIImage? {
         let renderView = ArchiveShareCardCanvasView(
-            appName: appDisplayName,
+            appName: previewAppName,
             title: shareTitle,
             content: shareContent,
             backgroundColor: selectedCardColor.color

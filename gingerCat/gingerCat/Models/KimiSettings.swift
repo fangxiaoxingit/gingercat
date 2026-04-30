@@ -5,6 +5,7 @@ enum AppSettingsKeys {
     static let autoAddTodoAfterAISummary = "settings.autoAddTodoAfterAISummary"
     static let todoDueReminderEnabled = "settings.todoDueReminderEnabled"
     static let todoDueReminderTime = "settings.todoDueReminderTime"
+    static let hasCompletedOnboarding = "settings.hasCompletedOnboarding"
     static let haptics = "settings.haptics"
     static let hapticsIntensity = "settings.hapticsIntensity"
     static let appearanceMode = "settings.appearanceMode"

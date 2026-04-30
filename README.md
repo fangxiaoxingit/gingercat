@@ -19,7 +19,7 @@
 - 普通摘要：把 OCR 原文整理成更易读的内容。
 - 待办事件：识别日期、时间、标题、关键词和描述，并写入系统“提醒事项”。
 - 多事件待办：同一张图里有多个时间点时，拆分为多条可添加的待办。
-- 取件码：识别咖啡、饮品、快递等取件信息，并在通知与 Live Activity 中优先展示。
+- 取件码：识别咖啡、饮品、快递等取件信息，并在通知中优先展示。
 
 ### 功能特性
 
@@ -28,12 +28,12 @@
 - 本地 OCR：基于 Vision `VNRecognizeTextRequest`，当前识别语言包含简体中文和英文。
 - AI 结构化分析：支持 DeepSeek、Kimi、MiniMax、OpenAI，也支持自定义 Base URL、模型 ID 和 API Key。
 - AI 配置测试：可在设置页发送测试提示词，并查看最近请求日志。
+- 国际化：支持自动、中文、英文三种界面语言模式，可在设置中切换。
 - 历史记录：基于 SwiftData 本地存储，支持搜索、筛选、详情查看、备注、删除和重新 OCR / AI 摘要。
 - 系统提醒事项：识别到有效时间后，可手动或自动加入 Apple Reminders。
 - 到期通知：可配置每天提醒时间，当天有待办时推送本地通知。
-- 取件优先通知：识别到取件码后，通知和 Dynamic Island 会优先显示取件信息。
+- 取件优先通知：识别到取件码后，通知会优先显示取件信息。
 - 桌面小组件：提供最近待办小组件和待办列表小组件。
-- Live Activity：显示 OCR 完成状态、摘要和取件信息。
 - 快捷指令：提供“导入图片并解析” App Intent，可从 Shortcuts 自动导入图片。
 - 深链跳转：支持 `gingercat://record/<UUID>` 打开指定记录。
 - 分享卡片：可把记录渲染为卡片图片并保存或分享。
@@ -46,7 +46,6 @@
 - Vision OCR
 - EventKit Reminders
 - WidgetKit
-- ActivityKit / Dynamic Island
 - App Intents / Shortcuts
 - Share Extension
 - UserNotifications
@@ -65,7 +64,7 @@ gingerCat/
 │   ├── Services/                    # OCR、AI、提醒、通知、导入管线等服务
 │   └── Theme/                       # 主题定义
 ├── gingerCatShareExtension/         # 系统分享扩展
-├── gingerCatLiveActivityWidget/     # Live Activity 与 WidgetKit 小组件
+├── gingerCatLiveActivityWidget/     # WidgetKit 小组件扩展（目录名保留）
 ├── gingerCatTests/                  # 单元测试
 └── gingerCatUITests/                # UI 测试
 ```
@@ -128,7 +127,7 @@ open gingerCat/gingerCat.xcodeproj
 ### 当前限制
 
 - 日历写入仍是预留能力，当前实际集成的是系统“提醒事项”。
-- 项目当前未提供完整的 `.lproj` 翻译资源，界面主要以中文字符串为主。
+- 当前已支持中英文国际化与语言切换，部分长尾文案仍在持续完善中。
 - App Group 和 Bundle Identifier 仍包含原作者标识，开源复用时必须替换。
 - AI 输出质量依赖所选模型、Prompt 和 OCR 原文质量。
 
@@ -141,7 +140,7 @@ open gingerCat/gingerCat.xcodeproj
 欢迎提交 Issue 和 Pull Request。建议在 PR 中说明：
 
 - 变更目标和影响范围。
-- 是否涉及权限、App Group、Widget、Live Activity 或数据模型迁移。
+- 是否涉及权限、App Group、Widget 或数据模型迁移。
 - 已执行的测试或手动验证步骤。
 
 ### License
@@ -161,7 +160,7 @@ The app stores every result locally and tries to extract:
 - General summaries: cleaner, readable summaries from OCR text.
 - Reminder events: date, time, title, keywords, and descriptions that can be added to Apple Reminders.
 - Multi-event reminders: multiple due dates from one image can become separate reminder candidates.
-- Pickup codes: coffee, beverage, express delivery, and other pickup information, prioritized in notifications and Live Activities.
+- Pickup codes: coffee, beverage, express delivery, and other pickup information, prioritized in notifications.
 
 ### Features
 
@@ -170,12 +169,12 @@ The app stores every result locally and tries to extract:
 - Local OCR: Apple Vision `VNRecognizeTextRequest`, currently configured for Simplified Chinese and English.
 - AI structured analysis: built-in support for DeepSeek, Kimi, MiniMax, OpenAI, plus custom Base URL, model ID, and API key.
 - AI config testing: send a test prompt from Settings and inspect recent request logs.
+- Internationalization: supports Automatic, Chinese, and English UI language modes in Settings.
 - Local archive: SwiftData-backed records with search, filters, detail view, notes, deletion, and rerun OCR / AI summary actions.
 - Apple Reminders integration: manually or automatically add recognized events to Reminders.
 - Due notifications: configurable daily local notification time for reminders due today.
-- Pickup-first notifications: pickup codes are highlighted in notifications and Dynamic Island.
+- Pickup-first notifications: pickup codes are highlighted in notifications.
 - Home Screen widgets: latest reminder widget and recent reminders list widget.
-- Live Activity: shows OCR completion, summary, and pickup information.
 - Shortcuts integration: App Intent for importing and parsing an image from Shortcuts.
 - Deep links: `gingercat://record/<UUID>` opens a specific record.
 - Share cards: render a record into an image card for saving or sharing.
@@ -188,7 +187,6 @@ The app stores every result locally and tries to extract:
 - Vision OCR
 - EventKit Reminders
 - WidgetKit
-- ActivityKit / Dynamic Island
 - App Intents / Shortcuts
 - Share Extension
 - UserNotifications
@@ -207,7 +205,7 @@ gingerCat/
 │   ├── Services/                    # OCR, AI, reminders, notifications, import pipeline
 │   └── Theme/                       # Theme definitions
 ├── gingerCatShareExtension/         # iOS Share Extension
-├── gingerCatLiveActivityWidget/     # Live Activity and WidgetKit widgets
+├── gingerCatLiveActivityWidget/     # WidgetKit extension (legacy folder name)
 ├── gingerCatTests/                  # Unit tests
 └── gingerCatUITests/                # UI tests
 ```
@@ -270,7 +268,7 @@ The app automatically appends `/chat/completions` when needed. For an OpenAI-com
 ### Current Limitations
 
 - Calendar writing is reserved in the UI, but the current working integration is Apple Reminders.
-- Full `.lproj` translation resources are not included yet; most UI strings are currently Chinese.
+- Chinese/English localization and language switching are available; some long-tail strings are still being refined.
 - App Group and Bundle Identifiers still contain the original author namespace and must be replaced before reuse.
 - AI quality depends on the selected model, prompt behavior, and OCR text quality.
 
@@ -283,7 +281,7 @@ Read [CODING_RULES.md](./CODING_RULES.md).
 Issues and pull requests are welcome. A good PR should include:
 
 - The goal and scope of the change.
-- Whether it affects permissions, App Groups, Widgets, Live Activities, or data model migration.
+- Whether it affects permissions, App Groups, Widgets, or data model migration.
 - Tests or manual verification steps performed.
 
 ### License

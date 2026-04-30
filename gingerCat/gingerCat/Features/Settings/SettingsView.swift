@@ -1477,49 +1477,9 @@ private struct AppLanguageSelectionView: View {
 
 private struct AppUsageGuideView: View {
     private let shortcutsURL = URL(string: "https://www.icloud.com/shortcuts/08727ff88e284f70bbe1d915f5a8b725")
-
-    private let sections: [AppUsageGuideSection] = [
-        AppUsageGuideSection(
-            iconName: "square.and.pencil",
-            title: String(appLocalized: "多入口导入"),
-            points: [
-                String(appLocalized: "支持文字、相册、拍照导入。"),
-                String(appLocalized: "支持系统分享扩展与快捷指令。")
-            ]
-        ),
-        AppUsageGuideSection(
-            iconName: "text.viewfinder",
-            title: String(appLocalized: "OCR 与 AI 整理"),
-            points: [
-                String(appLocalized: "先用本地 OCR 提取文本。"),
-                String(appLocalized: "启用 AI 后生成摘要与待办信息。")
-            ]
-        ),
-        AppUsageGuideSection(
-            iconName: "checklist",
-            title: String(appLocalized: "待办与提醒"),
-            points: [
-                String(appLocalized: "识别到时间后可加入系统提醒事项。"),
-                String(appLocalized: "支持自动添加和当天到期通知。")
-            ]
-        ),
-        AppUsageGuideSection(
-            iconName: "clock.arrow.trianglehead.counterclockwise.rotate.90",
-            title: String(appLocalized: "历史记录与分享"),
-            points: [
-                String(appLocalized: "识别结果会保存到本地历史。"),
-                String(appLocalized: "支持搜索、备注、重识别和分享卡片。")
-            ]
-        ),
-        AppUsageGuideSection(
-            iconName: "lock.shield",
-            title: String(appLocalized: "隐私与数据"),
-            points: [
-                String(appLocalized: "OCR 与记录默认保存在设备上。"),
-                String(appLocalized: "启用 AI 时，仅识别文本会发送到模型服务。")
-            ]
-        )
-    ]
+    private var sections: [AppUsageGuideSectionContent] {
+        AppUsageGuideContent.sections()
+    }
 
     var body: some View {
         ZStack {
@@ -1680,13 +1640,6 @@ private struct AppUsageGuideView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
-}
-
-private struct AppUsageGuideSection: Identifiable {
-    let id = UUID()
-    let iconName: String
-    let title: String
-    let points: [String]
 }
 
 private struct AppUsageGuideCard<Content: View>: View {
