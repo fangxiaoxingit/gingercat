@@ -131,10 +131,6 @@ open gingerCat/gingerCat.xcodeproj
 - App Group 和 Bundle Identifier 仍包含原作者标识，开源复用时必须替换。
 - AI 输出质量依赖所选模型、Prompt 和 OCR 原文质量。
 
-### 开发规范
-
-请阅读 [CODING_RULES.md](./CODING_RULES.md)。
-
 ### 贡献
 
 欢迎提交 Issue 和 Pull Request。建议在 PR 中说明：
