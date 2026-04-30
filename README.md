@@ -270,10 +270,6 @@ The app automatically appends `/chat/completions` when needed. For an OpenAI-com
 - App Group and Bundle Identifiers still contain the original author namespace and must be replaced before reuse.
 - AI quality depends on the selected model, prompt behavior, and OCR text quality.
 
-### Development Rules
-
-Read [CODING_RULES.md](./CODING_RULES.md).
-
 ### Contributing
 
 Issues and pull requests are welcome. A good PR should include:
