@@ -12,7 +12,9 @@
 
 ### 项目简介
 
-大橘小事是一款 SwiftUI iOS 应用，面向“截图里有重要信息但不想手动整理”的场景。它可以通过相册、相机、分享扩展、快捷指令或手动文字输入导入内容，使用 Apple Vision 做本地 OCR，并可选调用兼容 OpenAI Chat Completions 的模型服务生成结构化摘要。
+大橘小事是一款 SwiftUI iOS 应用，面向"截图里有重要信息但不想手动整理"的场景。它可以通过相册、相机、分享扩展、快捷指令或手动文字输入导入内容，使用 Apple Vision 做本地 OCR，并可选调用兼容 OpenAI Chat Completions 的模型服务生成结构化摘要。
+
+官网地址：https://xiaoxinnote.com/gingercat
 
 应用会把识别结果保存为本地历史记录，并尽可能提取：
 
